@@ -173,11 +173,20 @@ class ForecastPanel(tk.Frame):
             else:
                 a = arima_forecast(product["id"], 14)
                 r = rf_forecast(product["id"], 14)
-            self.after(0, lambda: self._display(a, r, name, model))
+            # Guard: panel may have been destroyed during theme toggle
+            try:
+                self.after(0, lambda: self._display(a, r, name, model))
+            except RuntimeError:
+                pass
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _display(self, arima, rf, name: str, model: str):
+        try:
+            if not self.winfo_exists():
+                return
+        except Exception:
+            return
         parts = []
         if arima and not arima["error"]:
             parts.append(f"ARIMA: {arima['total_predicted']:.1f} units")
@@ -260,12 +269,20 @@ class ForecastPanel(tk.Frame):
 
         def worker():
             recs = generate_recommendations()
-            self.after(0, lambda: self._display_recs(recs))
+            try:
+                self.after(0, lambda: self._display_recs(recs))
+            except RuntimeError:
+                pass  # panel destroyed during theme toggle
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _display_recs(self, recs: list[dict]):
-        self._rec_tree.delete(*self._rec_tree.get_children())
+        try:
+            if not self.winfo_exists():
+                return
+            self._rec_tree.delete(*self._rec_tree.get_children())
+        except tk.TclError:
+            return  # widget destroyed during theme toggle
         for r in recs:
             tag  = "warn" if r["sacks_to_order"] > 0 else "ok"
             icon = "Reorder" if r["sacks_to_order"] > 0 else "OK"

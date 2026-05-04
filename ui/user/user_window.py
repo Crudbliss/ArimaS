@@ -63,9 +63,14 @@ class UserWindow:
                  font=("Segoe UI", 8), bg=T.CARD, fg=T.FG_DIM
                  ).pack(pady=(2, 4))
 
-        mode_text = "🌙 Dark" if T.is_dark() else "☀ Light"
-        tk.Label(sb, text=mode_text, font=("Segoe UI", 7),
-                 bg=T.CARD, fg=T.FG_DIM).pack(pady=(0, 12))
+        mode_text = "🌙 Dark Mode" if T.is_dark() else "☀  Light Mode"
+        tk.Button(
+            sb, text=mode_text, font=("Segoe UI", 8),
+            bg=T.CARD, fg=T.FG_DIM, relief="flat",
+            cursor="hand2", bd=0, pady=2,
+            activebackground=T.SECONDARY, activeforeground=T.FG,
+            command=self._toggle_theme,
+        ).pack(pady=(0, 12))
 
         tk.Frame(sb, bg=T.SECONDARY, height=1).pack(fill="x", padx=15)
 

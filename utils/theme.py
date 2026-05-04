@@ -28,15 +28,15 @@ _DARK = {
 _LIGHT = {
     "BG":        "#FAF9F6",   # Pale Cream
     "CARD":      "#E6E3DE",   # Linen Beige
-    "ACCENT":    "#D4AF7C",   # Antique Gold
-    "SECONDARY": "#CE9D7A",   # Dusty Rose-Gold
-    "FG":        "#4A4433",   # Sepia
-    "FG_DIM":    "#8B7355",   # Lighter Sepia
+    "ACCENT":    "#8B5E3C",   # Dark Amber (readable on beige)
+    "SECONDARY": "#A07850",   # Dark Warm Brown (nav active bg)
+    "FG":        "#2E2416",   # Deep Espresso (primary text)
+    "FG_DIM":    "#5C3D1E",   # Medium Espresso (secondary text / sidebar items)
     # Chart colours
     "CHART_BAR":  "#D4AF7C",
     "CHART_HIST": "#CE9D7A",
-    "CHART_ALT":  "#FDFD96",  # Lemon Yellow
-    "CHART_RF":   "#FDFD96",
+    "CHART_ALT":  "#8B6914",  # Dark amber (readable on cream/beige)
+    "CHART_RF":   "#7A5C00",
 }
 
 _DARK_MPLRC = {
@@ -83,6 +83,9 @@ CHART_ALT  = _DARK["CHART_ALT"]
 CHART_RF   = _DARK["CHART_RF"]
 
 _dark_mode = True
+
+# Apply dark chart theme immediately so panels are correct on first boot
+matplotlib.rcParams.update(_DARK_MPLRC)
 
 
 def is_dark() -> bool:
