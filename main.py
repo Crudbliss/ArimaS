@@ -1,0 +1,56 @@
+"""
+main.py
+-------
+Entry point for the Rosemen Ukay-Ukay ArimaS application.
+"""
+
+import tkinter as tk
+import sys
+import os
+
+# Make sure imports resolve from the project root
+sys.path.insert(0, os.path.dirname(__file__))
+
+from database.db_setup import initialize_database
+from ui.login_window import LoginWindow
+
+
+def on_login_success(role: str):
+    """Called after a successful login — routes to the correct window."""
+    # Hide the login window
+    root.withdraw()
+
+    if role == "admin":
+        from ui.admin.admin_dashboard import AdminDashboard
+        dashboard = tk.Toplevel(root)
+        AdminDashboard(dashboard, on_logout)
+    else:
+        from ui.user.user_window import UserWindow
+        user_win = tk.Toplevel(root)
+        UserWindow(user_win, on_logout)
+
+
+def on_logout():
+    """Called when a user logs out — returns to login screen."""
+    from auth.auth_manager import logout
+    logout()
+
+    # Destroy any open Toplevel windows
+    for widget in root.winfo_children():
+        if isinstance(widget, tk.Toplevel):
+            widget.destroy()
+
+    # Re-show and reset the login window
+    root.deiconify()
+    LoginWindow(root, on_login_success)
+
+
+if __name__ == "__main__":
+    # Phase 1: ensure database + tables + seed data exist
+    initialize_database()
+
+    root = tk.Tk()
+    root.configure(bg="#1a1a2e")
+
+    LoginWindow(root, on_login_success)
+    root.mainloop()
