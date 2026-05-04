@@ -16,8 +16,8 @@ class AdminDashboard:
 
         self.root.title("Admin — Rosemen Ukay-Ukay")
         self.root.configure(bg=BG)
-        self._center(1150, 680)
         self.root.resizable(True, True)
+        self.root.state("zoomed")   # open maximized
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_layout()
@@ -25,13 +25,7 @@ class AdminDashboard:
         self._create_panels()
         self._show("home")
 
-    # ── Window helpers ────────────────────────────────────────────────
-
-    def _center(self, w, h):
-        self.root.update_idletasks()
-        sw = self.root.winfo_screenwidth()
-        sh = self.root.winfo_screenheight()
-        self.root.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
+    # ── Window close ──────────────────────────────────────────────────
 
     def _on_close(self):
         if messagebox.askyesno("Exit", "Are you sure you want to exit?",

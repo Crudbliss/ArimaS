@@ -1,8 +1,8 @@
 """
 home_panel.py  –  Admin dashboard home:
-  • Stat cards
+  • Stat cards (Low Stock hidden when 0; Total Stock cycles per-product on click)
   • Sales chart with Daily / Weekly / Monthly / Yearly toggle
-  • Low Stock table (hidden when count = 0)
+  • Low Stock table directly below "Sales Revenue" label (hidden when 0)
 """
 
 import tkinter as tk
@@ -12,11 +12,10 @@ matplotlib.use("TkAgg")
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
-from logic.inventory_logic import get_dashboard_stats, get_low_stock
+from logic.inventory_logic import get_dashboard_stats, get_low_stock, get_all_products
 from database.db_setup import get_connection
 from utils.theme import BG, CARD, ACCENT, SECONDARY, FG, FG_DIM, apply_treeview_style
 
-# ── Matplotlib dark theme ─────────────────────────────────────────────
 matplotlib.rcParams.update({
     "figure.facecolor": "#16213e",
     "axes.facecolor":   "#1a1a2e",
@@ -33,161 +32,203 @@ PERIODS = ["Daily", "Weekly", "Monthly", "Yearly"]
 
 
 def _fetch_sales_data(period: str) -> tuple[list[str], list[float]]:
-    """Return (labels, revenue_values) for the selected period."""
     conn = get_connection()
-
     if period == "Daily":
         rows = conn.execute("""
-            SELECT date(sold_at, 'localtime') AS d, COALESCE(SUM(total_amount),0)
+            SELECT date(sold_at,'localtime'), COALESCE(SUM(total_amount),0)
             FROM sales
             WHERE date(sold_at,'localtime') >= date('now','localtime','-13 days')
-            GROUP BY d ORDER BY d
+            GROUP BY date(sold_at,'localtime') ORDER BY 1
         """).fetchall()
-        labels = [r[0][5:] for r in rows]   # MM-DD
-
+        labels = [r[0][5:] for r in rows]
     elif period == "Weekly":
         rows = conn.execute("""
-            SELECT strftime('%Y-W%W', sold_at, 'localtime') AS w,
-                   COALESCE(SUM(total_amount),0)
+            SELECT strftime('%Y-W%W',sold_at,'localtime'), COALESCE(SUM(total_amount),0)
             FROM sales
             WHERE date(sold_at,'localtime') >= date('now','localtime','-83 days')
-            GROUP BY w ORDER BY w
+            GROUP BY 1 ORDER BY 1
         """).fetchall()
-        labels = [r[0][5:] for r in rows]   # W##
-
+        labels = [r[0][5:] for r in rows]
     elif period == "Monthly":
         rows = conn.execute("""
-            SELECT strftime('%Y-%m', sold_at, 'localtime') AS m,
-                   COALESCE(SUM(total_amount),0)
+            SELECT strftime('%Y-%m',sold_at,'localtime'), COALESCE(SUM(total_amount),0)
             FROM sales
             WHERE date(sold_at,'localtime') >= date('now','localtime','-364 days')
-            GROUP BY m ORDER BY m
+            GROUP BY 1 ORDER BY 1
         """).fetchall()
         labels = [r[0] for r in rows]
-
-    else:   # Yearly
+    else:
         rows = conn.execute("""
-            SELECT strftime('%Y', sold_at, 'localtime') AS y,
-                   COALESCE(SUM(total_amount),0)
-            FROM sales
-            GROUP BY y ORDER BY y
+            SELECT strftime('%Y',sold_at,'localtime'), COALESCE(SUM(total_amount),0)
+            FROM sales GROUP BY 1 ORDER BY 1
         """).fetchall()
         labels = [r[0] for r in rows]
-
     conn.close()
-    values = [float(r[1]) for r in rows]
-    return labels, values
+    return labels, [float(r[1]) for r in rows]
 
 
 class HomePanel(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
-        self._period    = tk.StringVar(value="Daily")
-        self._chart_canvas = None
+        self._period        = tk.StringVar(value="Daily")
+        self._chart_canvas  = None
+        self._stock_idx     = -1          # -1 = All, 0..n = individual product
+        self._all_products: list[dict] = []
+        self._stock_card_label: tk.Label | None = None
+        self._stock_card_sub:   tk.Label | None = None
         self._build()
 
     # ── Build ─────────────────────────────────────────────────────────
 
     def _build(self):
-        # Make the panel scrollable by using a canvas + inner frame
         outer = tk.Frame(self, bg=BG)
         outer.pack(fill="both", expand=True)
 
-        # ── Title row ────────────────────────────────────────────────
+        # Title row
         title_row = tk.Frame(outer, bg=BG)
-        title_row.pack(fill="x", padx=28, pady=(20, 4))
+        title_row.pack(fill="x", padx=28, pady=(20, 6))
         tk.Label(title_row, text="Dashboard Overview",
                  font=("Segoe UI", 16, "bold"), bg=BG, fg=FG).pack(side="left")
         tk.Button(title_row, text="⟳  Refresh", font=("Segoe UI", 9),
                   bg=SECONDARY, fg=FG, relief="flat", cursor="hand2",
                   padx=10, pady=4, command=self.refresh).pack(side="right")
 
-        # ── Stat cards ───────────────────────────────────────────────
+        # Stat cards row
         self._cards_frame = tk.Frame(outer, bg=BG)
-        self._cards_frame.pack(fill="x", padx=20, pady=(0, 12))
+        self._cards_frame.pack(fill="x", padx=20, pady=(0, 10))
 
-        # ── Sales chart section ──────────────────────────────────────
+        # ── Chart section ─────────────────────────────────────────────
         chart_section = tk.Frame(outer, bg=BG)
-        chart_section.pack(fill="both", expand=True, padx=28, pady=(0, 10))
+        chart_section.pack(fill="both", expand=True, padx=28, pady=(0, 16))
 
-        # Chart header
+        # "Sales Revenue" header + toggle buttons
         chart_hdr = tk.Frame(chart_section, bg=BG)
-        chart_hdr.pack(fill="x", pady=(0, 6))
+        chart_hdr.pack(fill="x", pady=(0, 4))
         tk.Label(chart_hdr, text="Sales Revenue",
                  font=("Segoe UI", 12, "bold"), bg=BG, fg=FG).pack(side="left")
-
-        # Period toggle buttons
         toggle_frame = tk.Frame(chart_hdr, bg=BG)
         toggle_frame.pack(side="right")
         self._period_btns: dict[str, tk.Button] = {}
         for p in PERIODS:
-            btn = tk.Button(
-                toggle_frame, text=p, font=("Segoe UI", 9),
-                relief="flat", cursor="hand2", padx=12, pady=4,
-                command=lambda x=p: self._switch_period(x),
-            )
+            btn = tk.Button(toggle_frame, text=p, font=("Segoe UI", 9),
+                            relief="flat", cursor="hand2", padx=12, pady=4,
+                            command=lambda x=p: self._switch_period(x))
             btn.pack(side="left", padx=2)
             self._period_btns[p] = btn
 
-        # Chart container
-        self._chart_frame = tk.Frame(chart_section, bg=CARD, height=240)
-        self._chart_frame.pack(fill="x")
-        self._chart_frame.pack_propagate(False)
-
-        # ── Low Stock section (conditionally shown) ──────────────────
-        self._low_section = tk.Frame(outer, bg=BG)
-        self._low_section.pack(fill="x", padx=28, pady=(4, 16))
+        # Low Stock section — sits directly below "Sales Revenue" heading
+        self._low_section = tk.Frame(chart_section, bg=BG)
+        # (packed conditionally in _refresh_low_stock)
 
         self._low_title = tk.Label(
             self._low_section,
             text="Low / Out-of-Stock Alerts",
-            font=("Segoe UI", 12, "bold"), bg=BG, fg=ACCENT,
+            font=("Segoe UI", 11, "bold"), bg=BG, fg=ACCENT,
         )
         tree_container = tk.Frame(self._low_section, bg=CARD)
 
         style = apply_treeview_style("Home.Treeview")
-        cols = ("name", "stock", "reorder")
-        self._tree = ttk.Treeview(tree_container, columns=cols,
-                                  show="headings", style=style, height=5)
-        self._tree.heading("name",    text="Product")
-        self._tree.heading("stock",   text="Stock (pcs)")
-        self._tree.heading("reorder", text="Reorder Level")
-        self._tree.column("name",    width=260)
-        self._tree.column("stock",   width=160, anchor="center")
-        self._tree.column("reorder", width=160, anchor="center")
-
+        self._low_tree = ttk.Treeview(tree_container, columns=("name","stock","reorder"),
+                                      show="headings", style=style, height=4)
+        self._low_tree.heading("name",    text="Product")
+        self._low_tree.heading("stock",   text="Stock (pcs)")
+        self._low_tree.heading("reorder", text="Reorder Level")
+        self._low_tree.column("name",    width=240)
+        self._low_tree.column("stock",   width=140, anchor="center")
+        self._low_tree.column("reorder", width=140, anchor="center")
         vsb = ttk.Scrollbar(tree_container, orient="vertical",
-                            command=self._tree.yview)
-        self._tree.configure(yscrollcommand=vsb.set)
+                            command=self._low_tree.yview)
+        self._low_tree.configure(yscrollcommand=vsb.set)
         vsb.pack(side="right", fill="y")
-        self._tree.pack(fill="x")
+        self._low_tree.pack(fill="x")
+        self._tree_container = tree_container
 
-        self._low_title_widget   = self._low_title
-        self._tree_container     = tree_container
+        # Chart frame — below low stock
+        self._chart_frame = tk.Frame(chart_section, bg=CARD, height=230)
+        self._chart_frame.pack(fill="both", expand=True)
+        self._chart_frame.pack_propagate(False)
 
         self.refresh()
 
-    # ── Cards helper ──────────────────────────────────────────────────
+    # ── Stat Cards ────────────────────────────────────────────────────
 
-    def _make_card(self, parent, label: str, value: str, color: str):
-        card = tk.Frame(parent, bg=CARD, padx=20, pady=14)
+    def _make_card(self, parent, label: str, value: str, color: str,
+                   on_click=None) -> tuple[tk.Frame, tk.Label, tk.Label]:
+        card = tk.Frame(parent, bg=CARD, padx=18, pady=14,
+                        cursor="hand2" if on_click else "")
         card.pack(side="left", fill="x", expand=True, padx=6)
-        tk.Label(card, text=value, font=("Segoe UI", 20, "bold"),
-                 bg=CARD, fg=color).pack(anchor="w")
-        tk.Label(card, text=label, font=("Segoe UI", 8),
-                 bg=CARD, fg=FG_DIM).pack(anchor="w", pady=(2, 0))
+        val_lbl = tk.Label(card, text=value, font=("Segoe UI", 20, "bold"),
+                           bg=CARD, fg=color)
+        val_lbl.pack(anchor="w")
+        sub_lbl = tk.Label(card, text=label, font=("Segoe UI", 8),
+                           bg=CARD, fg=FG_DIM)
+        sub_lbl.pack(anchor="w", pady=(2, 0))
+        if on_click:
+            for w in (card, val_lbl, sub_lbl):
+                w.bind("<Button-1>", lambda e: on_click())
+                w.bind("<Enter>", lambda e, f=card: f.config(bg="#1f2d4a"))
+                w.bind("<Leave>", lambda e, f=card: f.config(bg=CARD))
+        return card, val_lbl, sub_lbl
+
+    def _build_cards(self, stats: dict):
+        for w in self._cards_frame.winfo_children():
+            w.destroy()
+
+        self._make_card(self._cards_frame, "Total Products",
+                        str(stats["total_products"]), FG)
+
+        # Clickable Total Stock card — cycles through all products
+        self._make_card(
+            self._cards_frame,
+            self._stock_card_sublabel(),
+            self._stock_card_value(),
+            "#4cc9f0",
+            on_click=self._cycle_stock,
+        )
+
+        # Low Stock card — hidden when 0
+        if stats["low_stock"] > 0:
+            self._make_card(self._cards_frame, "Low Stock Alerts",
+                            str(stats["low_stock"]), ACCENT)
+
+        self._make_card(self._cards_frame, "Today's Sales",
+                        str(stats["today_sales"]), "#06d6a0")
+        self._make_card(self._cards_frame, "Today's Revenue",
+                        f"P{stats['today_revenue']:,.2f}", "#ffd166")
+
+    def _stock_card_value(self) -> str:
+        if self._stock_idx == -1 or not self._all_products:
+            total = sum(p["stock_pieces"] for p in self._all_products) if self._all_products else 0
+            return f"{total:,}"
+        p = self._all_products[self._stock_idx]
+        return str(p["stock_pieces"])
+
+    def _stock_card_sublabel(self) -> str:
+        if self._stock_idx == -1 or not self._all_products:
+            return "Total Stock (pcs)  [ click to filter ]"
+        p = self._all_products[self._stock_idx]
+        idx = self._stock_idx + 1
+        total = len(self._all_products)
+        return f"{p['name']} Stock  ({idx}/{total}) — click"
+
+    def _cycle_stock(self):
+        if not self._all_products:
+            return
+        self._stock_idx += 1
+        if self._stock_idx >= len(self._all_products):
+            self._stock_idx = -1
+        # Rebuild only cards (cheap)
+        stats = get_dashboard_stats()
+        self._build_cards(stats)
 
     # ── Period toggle ─────────────────────────────────────────────────
 
     def _switch_period(self, period: str):
         self._period.set(period)
         self._draw_chart()
-        # Update button highlight
         for p, btn in self._period_btns.items():
-            if p == period:
-                btn.config(bg=ACCENT, fg=FG)
-            else:
-                btn.config(bg=SECONDARY, fg=FG_DIM)
+            btn.config(bg=ACCENT if p == period else SECONDARY,
+                       fg=FG if p == period else FG_DIM)
 
     # ── Chart ─────────────────────────────────────────────────────────
 
@@ -195,92 +236,72 @@ class HomePanel(tk.Frame):
         period = self._period.get()
         labels, values = _fetch_sales_data(period)
 
-        # Destroy old canvas
         for w in self._chart_frame.winfo_children():
             w.destroy()
 
         if not values:
             tk.Label(self._chart_frame, text="No sales data for this period.",
-                     font=("Segoe UI", 11), bg=CARD, fg=FG_DIM
-                     ).pack(expand=True)
+                     font=("Segoe UI", 11), bg=CARD, fg=FG_DIM).pack(expand=True)
             return
 
-        fig = Figure(figsize=(8, 2.6), dpi=96)
+        fig = Figure(figsize=(8, 2.5), dpi=96)
         ax  = fig.add_subplot(111)
+        x   = range(len(labels))
 
-        # Bar chart
-        x     = range(len(labels))
-        bars  = ax.bar(x, values, color=ACCENT, alpha=0.85, width=0.6, zorder=3)
-
-        # Highlight the last bar (most recent)
+        bars = ax.bar(x, values, color=ACCENT, alpha=0.85, width=0.6, zorder=3)
         if bars:
             bars[-1].set_color("#ffd166")
 
-        # Value labels on bars (only if not too many)
         if len(labels) <= 15:
             for bar, val in zip(bars, values):
                 ax.text(bar.get_x() + bar.get_width() / 2,
-                        bar.get_height() + max(values) * 0.01,
-                        f"₱{val:,.0f}", ha="center", va="bottom",
+                        bar.get_height() + max(values) * 0.015,
+                        f"P{val:,.0f}", ha="center", va="bottom",
                         fontsize=6.5, color=FG_DIM)
 
         ax.set_xticks(list(x))
         ax.set_xticklabels(labels, rotation=30 if len(labels) > 7 else 0,
                            fontsize=7.5)
-        ax.set_ylabel("Revenue (₱)", fontsize=8)
+        ax.set_ylabel("Revenue (P)", fontsize=8)
         ax.set_title(f"{period} Sales Revenue", fontsize=10, pad=6)
         ax.grid(axis="y", alpha=0.3)
         ax.set_axisbelow(True)
-        fig.tight_layout(pad=1.2)
+        fig.tight_layout(pad=1.0)
 
         canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True)
         self._chart_canvas = canvas
 
-    # ── Low stock section ─────────────────────────────────────────────
+    # ── Low Stock ─────────────────────────────────────────────────────
 
     def _refresh_low_stock(self):
         low = get_low_stock()
-
         if not low:
-            # Hide the whole section
-            self._low_title_widget.pack_forget()
-            self._tree_container.pack_forget()
+            self._low_section.pack_forget()
         else:
-            # Show section
-            self._low_title_widget.pack(anchor="w", pady=(0, 6))
+            self._low_section.pack(fill="x", pady=(0, 8),
+                                   before=self._chart_frame)
+            self._low_title.pack(anchor="w", pady=(0, 4))
             self._tree_container.pack(fill="x")
 
-            self._tree.delete(*self._tree.get_children())
+            self._low_tree.delete(*self._low_tree.get_children())
             for item in low:
                 tag = "critical" if item["stock"] == 0 else "low"
-                self._tree.insert("", "end",
-                                  values=(item["name"], item["stock"], item["reorder"]),
-                                  tags=(tag,))
-            self._tree.tag_configure("critical", foreground=ACCENT)
-            self._tree.tag_configure("low",      foreground="#ffd166")
+                self._low_tree.insert("", "end",
+                                      values=(item["name"], item["stock"], item["reorder"]),
+                                      tags=(tag,))
+            self._low_tree.tag_configure("critical", foreground=ACCENT)
+            self._low_tree.tag_configure("low",      foreground="#ffd166")
 
-    # ── Full refresh ──────────────────────────────────────────────────
+    # ── Full Refresh ──────────────────────────────────────────────────
 
     def refresh(self):
+        self._all_products = get_all_products()
         stats = get_dashboard_stats()
 
-        # Rebuild stat cards
-        for w in self._cards_frame.winfo_children():
-            w.destroy()
-        self._make_card(self._cards_frame, "Total Products",
-                        str(stats["total_products"]), FG)
-        self._make_card(self._cards_frame, "Total Stock (pcs)",
-                        f"{stats['total_stock']:,}", "#4cc9f0")
-        self._make_card(self._cards_frame, "Low Stock Alerts",
-                        str(stats["low_stock"]), ACCENT if stats["low_stock"] else "#06d6a0")
-        self._make_card(self._cards_frame, "Today's Sales",
-                        str(stats["today_sales"]), "#06d6a0")
-        self._make_card(self._cards_frame, "Today's Revenue",
-                        f"P{stats['today_revenue']:,.2f}", "#ffd166")
+        self._build_cards(stats)
 
-        # Highlight active period button
         cur = self._period.get()
         for p, btn in self._period_btns.items():
             btn.config(bg=ACCENT if p == cur else SECONDARY,

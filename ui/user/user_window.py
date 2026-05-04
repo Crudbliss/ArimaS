@@ -17,8 +17,8 @@ class UserWindow:
 
         self.root.title("Point of Sale — Rosemen Ukay-Ukay")
         self.root.configure(bg=BG)
-        self._center(1050, 650)
         self.root.resizable(True, True)
+        self.root.state("zoomed")   # open maximized
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_layout()

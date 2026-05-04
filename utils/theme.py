@@ -2,6 +2,7 @@
 theme.py  –  Shared dark-mode styling for ttk widgets.
 """
 
+import tkinter as tk
 from tkinter import ttk
 
 BG        = "#1a1a2e"
@@ -15,6 +16,15 @@ FG_DIM    = "#a8a8b3"
 def apply_treeview_style(name: str = "Dark.Treeview"):
     """Configure a dark ttk.Treeview style. Use name in widget's style= param."""
     style = ttk.Style()
+
+    # 'clam' is the only built-in theme that respects fieldbackground/foreground
+    # overrides on Windows. Without this, Windows' native 'vista' theme ignores
+    # our dark colour settings and renders plain white backgrounds.
+    try:
+        style.theme_use("clam")
+    except tk.TclError:
+        pass   # already set or unavailable — safe to continue
+
     style.configure(name,
         background=CARD,
         foreground=FG,
