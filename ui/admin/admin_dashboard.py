@@ -1,64 +1,85 @@
 """
 admin_dashboard.py  –  Main admin window with sidebar navigation.
+  • Clicking the 👗 logo toggles dark/light theme instantly and rebuilds the UI.
 """
 
+import sys
 import tkinter as tk
 from tkinter import messagebox
+import utils.theme as T
 from auth.auth_manager import get_current_user
-from utils.theme import BG, CARD, ACCENT, SECONDARY, FG, FG_DIM
+
+# Panel module paths to flush from sys.modules cache on theme toggle
+_PANEL_MODULES = (
+    "ui.admin.home_panel",
+    "ui.admin.inventory_panel",
+    "ui.admin.logs_panel",
+    "ui.admin.user_manager",
+    "ui.admin.forecast_panel",
+)
 
 
 class AdminDashboard:
     def __init__(self, root: tk.Tk, on_logout):
-        self.root     = root
-        self.on_logout = on_logout
-        self.user     = get_current_user()
+        self.root       = root
+        self.on_logout  = on_logout
+        self.user       = get_current_user()
+        self._panels: dict[str, tk.Frame] = {}
 
         self.root.title("Admin — Rosemen Ukay-Ukay")
-        self.root.configure(bg=BG)
         self.root.resizable(True, True)
-        self.root.state("zoomed")   # open maximized
+        self.root.state("zoomed")
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
-        self._build_layout()
+        self._build()
+
+    # ── Full build ────────────────────────────────────────────────────
+
+    def _build(self):
+        self.root.configure(bg=T.BG)
+
+        # Sidebar
+        self.sidebar = tk.Frame(self.root, bg=T.CARD, width=210)
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.pack_propagate(False)
+
+        # Content area
+        self.content = tk.Frame(self.root, bg=T.BG)
+        self.content.pack(side="left", fill="both", expand=True)
+
         self._build_sidebar()
         self._create_panels()
         self._show("home")
 
-    # ── Window close ──────────────────────────────────────────────────
-
-    def _on_close(self):
-        if messagebox.askyesno("Exit", "Are you sure you want to exit?",
-                               parent=self.root):
-            self.root.destroy()
-            self.on_logout()
-
-    # ── Layout ────────────────────────────────────────────────────────
-
-    def _build_layout(self):
-        # Left sidebar
-        self.sidebar = tk.Frame(self.root, bg=CARD, width=210)
-        self.sidebar.pack(side="left", fill="y")
-        self.sidebar.pack_propagate(False)
-
-        # Right content area
-        self.content = tk.Frame(self.root, bg=BG)
-        self.content.pack(side="left", fill="both", expand=True)
+    # ── Sidebar ───────────────────────────────────────────────────────
 
     def _build_sidebar(self):
         sb = self.sidebar
 
-        # Logo block
-        tk.Label(sb, text="👗", font=("Segoe UI", 28),
-                 bg=CARD, fg=ACCENT).pack(pady=(24, 2))
-        tk.Label(sb, text="Rosemen Ukay-Ukay", font=("Segoe UI", 11, "bold"),
-                 bg=CARD, fg=FG, justify="center").pack()
-        tk.Label(sb, text="Admin Panel", font=("Segoe UI", 8),
-                 bg=CARD, fg=FG_DIM).pack(pady=(2, 16))
+        # Logo — click to toggle theme
+        self._logo_btn = tk.Button(
+            sb, text="👗", font=("Segoe UI", 28),
+            bg=T.CARD, fg=T.ACCENT,
+            relief="flat", cursor="hand2", bd=0,
+            activebackground=T.CARD, activeforeground=T.SECONDARY,
+            command=self._toggle_theme,
+        )
+        self._logo_btn.pack(pady=(24, 2))
 
-        tk.Frame(sb, bg=SECONDARY, height=1).pack(fill="x", padx=15)
+        tk.Label(sb, text="Rosemen Ukay-Ukay",
+                 font=("Segoe UI", 11, "bold"),
+                 bg=T.CARD, fg=T.FG, justify="center").pack()
+        tk.Label(sb, text="Admin Panel",
+                 font=("Segoe UI", 8), bg=T.CARD, fg=T.FG_DIM
+                 ).pack(pady=(2, 4))
 
-        # Nav items
+        mode_text = "🌙 Dark" if T.is_dark() else "☀ Light"
+        tk.Label(sb, text=mode_text, font=("Segoe UI", 7),
+                 bg=T.CARD, fg=T.FG_DIM).pack(pady=(0, 12))
+
+        tk.Frame(sb, bg=T.SECONDARY, height=1).pack(fill="x", padx=15)
+
+        # Nav buttons
         self._nav_btns: dict[str, tk.Button] = {}
         nav = [
             ("home",      "🏠   Dashboard"),
@@ -70,28 +91,26 @@ class AdminDashboard:
         for key, label in nav:
             btn = tk.Button(
                 sb, text=label, font=("Segoe UI", 10),
-                bg=CARD, fg=FG_DIM, relief="flat",
+                bg=T.CARD, fg=T.FG_DIM, relief="flat",
                 cursor="hand2", anchor="w", padx=20, pady=10,
-                activebackground=SECONDARY, activeforeground=FG,
+                activebackground=T.SECONDARY, activeforeground=T.FG,
                 command=lambda k=key: self._show(k),
             )
             btn.pack(fill="x", pady=1)
             self._nav_btns[key] = btn
 
-        # Bottom section
-        tk.Frame(sb, bg=SECONDARY, height=1).pack(
+        # Bottom
+        tk.Frame(sb, bg=T.SECONDARY, height=1).pack(
             fill="x", padx=15, side="bottom", pady=4)
-
         tk.Button(
             sb, text="⏻   Logout", font=("Segoe UI", 10),
-            bg=CARD, fg=ACCENT, relief="flat",
+            bg=T.CARD, fg=T.ACCENT, relief="flat",
             cursor="hand2", anchor="w", padx=20, pady=10,
-            activebackground=ACCENT, activeforeground=FG,
+            activebackground=T.ACCENT, activeforeground=T.FG,
             command=self._logout,
         ).pack(fill="x", side="bottom")
-
         tk.Label(sb, text=f"👤  {self.user['username']}",
-                 font=("Segoe UI", 9), bg=CARD, fg=FG_DIM
+                 font=("Segoe UI", 9), bg=T.CARD, fg=T.FG_DIM
                  ).pack(side="bottom", pady=6)
 
     # ── Panels ────────────────────────────────────────────────────────
@@ -103,21 +122,18 @@ class AdminDashboard:
         from ui.admin.user_manager    import UserManagerPanel
         from ui.admin.forecast_panel  import ForecastPanel
 
-        self._panels: dict[str, tk.Frame] = {
+        self._panels = {
             "home":      HomePanel(self.content),
             "inventory": InventoryPanel(self.content),
+            "forecast":  ForecastPanel(self.content),
             "logs":      LogsPanel(self.content),
             "users":     UserManagerPanel(self.content),
-            "forecast":  ForecastPanel(self.content),
         }
 
     def _show(self, key: str):
         for k, btn in self._nav_btns.items():
-            if k == key:
-                btn.config(bg=SECONDARY, fg=FG)
-            else:
-                btn.config(bg=CARD, fg=FG_DIM)
-
+            btn.config(bg=T.SECONDARY if k == key else T.CARD,
+                       fg=T.FG if k == key else T.FG_DIM)
         for k, panel in self._panels.items():
             if k == key:
                 panel.pack(fill="both", expand=True)
@@ -126,7 +142,36 @@ class AdminDashboard:
             else:
                 panel.pack_forget()
 
-    # ── Logout ────────────────────────────────────────────────────────
+    # ── Theme toggle ──────────────────────────────────────────────────
+
+    def _toggle_theme(self):
+        """Toggle dark/light mode and rebuild the entire UI."""
+        T.toggle_theme()
+        T.apply_all_treeview_styles()
+
+        # Flush panel module cache so re-imports pick up new colours
+        for key in list(sys.modules.keys()):
+            if any(key.startswith(p) for p in _PANEL_MODULES):
+                del sys.modules[key]
+
+        # Destroy all child widgets and rebuild from scratch
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        self.sidebar = None
+        self.content = None
+        self._panels = {}
+        self._nav_btns = {}
+
+        self._build()
+
+    # ── Window / session ──────────────────────────────────────────────
+
+    def _on_close(self):
+        if messagebox.askyesno("Exit", "Are you sure you want to exit?",
+                               parent=self.root):
+            self.root.destroy()
+            self.on_logout()
 
     def _logout(self):
         if messagebox.askyesno("Logout", "Are you sure you want to logout?",
