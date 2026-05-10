@@ -71,21 +71,21 @@ _LIGHT_MPLRC = {
 # All panels import these. They are updated in-place on toggle so that
 # newly-created widgets (after rebuild) pick up the current values.
 
-BG        = _DARK["BG"]
-CARD      = _DARK["CARD"]
-ACCENT    = _DARK["ACCENT"]
-SECONDARY = _DARK["SECONDARY"]
-FG        = _DARK["FG"]
-FG_DIM    = _DARK["FG_DIM"]
-CHART_BAR  = _DARK["CHART_BAR"]
-CHART_HIST = _DARK["CHART_HIST"]
-CHART_ALT  = _DARK["CHART_ALT"]
-CHART_RF   = _DARK["CHART_RF"]
+BG        = _LIGHT["BG"]
+CARD      = _LIGHT["CARD"]
+ACCENT    = _LIGHT["ACCENT"]
+SECONDARY = _LIGHT["SECONDARY"]
+FG        = _LIGHT["FG"]
+FG_DIM    = _LIGHT["FG_DIM"]
+CHART_BAR  = _LIGHT["CHART_BAR"]
+CHART_HIST = _LIGHT["CHART_HIST"]
+CHART_ALT  = _LIGHT["CHART_ALT"]
+CHART_RF   = _LIGHT["CHART_RF"]
 
-_dark_mode = True
+_dark_mode = False
 
-# Apply dark chart theme immediately so panels are correct on first boot
-matplotlib.rcParams.update(_DARK_MPLRC)
+# Apply light chart theme immediately so panels are correct on first boot
+matplotlib.rcParams.update(_LIGHT_MPLRC)
 
 
 def is_dark() -> bool:

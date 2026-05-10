@@ -7,6 +7,22 @@ Entry point for the Rosemen Ukay-Ukay ArimaS application.
 import tkinter as tk
 import sys
 import os
+import subprocess
+
+def _ensure_dependencies():
+    required = {"statsmodels": "statsmodels", "matplotlib": "matplotlib", "pandas": "pandas", "sqlalchemy": "sqlalchemy"}
+    missing = []
+    for pkg, pip_name in required.items():
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing.append(pip_name)
+    if missing:
+        print(f"Installing missing dependencies: {', '.join(missing)}...")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", *missing])
+        print("Dependencies installed successfully!")
+
+_ensure_dependencies()
 
 # Make sure imports resolve from the project root
 sys.path.insert(0, os.path.dirname(__file__))
