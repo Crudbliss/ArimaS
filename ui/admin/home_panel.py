@@ -57,8 +57,9 @@ def _fetch_sales_data(period: str) -> tuple[list[str], list[float]]:
 
 
 class HomePanel(tk.Frame):
-    def __init__(self, parent):
+    def __init__(self, parent, on_navigate=None):
         super().__init__(parent, bg=T.BG)
+        self.on_navigate = on_navigate
         self._period        = tk.StringVar(value="Daily")
         self._chart_canvas  = None
         self._stock_idx     = -1
@@ -162,7 +163,8 @@ class HomePanel(tk.Frame):
             w.destroy()
 
         self._make_card(self._cards_frame, "Total Products",
-                        str(stats["total_products"]), T.FG)
+                        str(stats["total_products"]), T.FG,
+                        on_click=lambda: self.on_navigate("inventory") if self.on_navigate else None)
 
         # Clickable Total Stock card — cycles through all products
         self._make_card(
@@ -176,12 +178,15 @@ class HomePanel(tk.Frame):
         # Low Stock card — hidden when 0
         if stats["low_stock"] > 0:
             self._make_card(self._cards_frame, "Low Stock Alerts",
-                            str(stats["low_stock"]), T.ACCENT)
+                            str(stats["low_stock"]), T.ACCENT,
+                            on_click=lambda: self.on_navigate("inventory") if self.on_navigate else None)
 
         self._make_card(self._cards_frame, "Today's Sales",
-                        str(stats["today_sales"]), "#06d6a0")
+                        str(stats["today_sales"]), "#06d6a0",
+                        on_click=lambda: self.on_navigate("reports") if self.on_navigate else None)
         self._make_card(self._cards_frame, "Today's Revenue",
-                        f"P{stats['today_revenue']:,.2f}", T.CHART_ALT)
+                        f"P{stats['today_revenue']:,.2f}", T.CHART_ALT,
+                        on_click=lambda: self.on_navigate("reports") if self.on_navigate else None)
 
     def _stock_card_value(self) -> str:
         if self._stock_idx == -1 or not self._all_products:
@@ -235,16 +240,19 @@ class HomePanel(tk.Frame):
         ax  = fig.add_subplot(111)
         x   = range(len(labels))
 
-        bars = ax.bar(x, values, color=T.CHART_BAR, alpha=0.85, width=0.6, zorder=3)
-        if bars:
-            bars[-1].set_color(T.CHART_ALT)
+        # Use a sleek line graph with filled area instead of bars
+        ax.plot(x, values, color=T.CHART_BAR, marker="o", linewidth=2.5, markersize=6, zorder=3)
+        ax.fill_between(x, values, alpha=0.15, color=T.CHART_BAR, zorder=2)
+        
+        # Highlight the last point
+        if values:
+            ax.plot(x[-1], values[-1], marker="o", color=T.CHART_ALT, markersize=8, zorder=4)
 
         if len(labels) <= 15:
-            for bar, val in zip(bars, values):
-                ax.text(bar.get_x() + bar.get_width() / 2,
-                        bar.get_height() + max(values) * 0.015,
+            for i, val in enumerate(values):
+                ax.text(i, val + max(values) * 0.05,
                         f"P{val:,.0f}", ha="center", va="bottom",
-                        fontsize=6.5, color=T.FG_DIM)
+                        fontsize=7, color=T.FG_DIM, zorder=5)
 
         ax.set_xticks(list(x))
         ax.set_xticklabels(labels, rotation=30 if len(labels) > 7 else 0,

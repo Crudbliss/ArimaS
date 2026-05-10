@@ -61,10 +61,17 @@ def create_tables(conn: sqlite3.Connection):
             pieces_per_sack  INTEGER NOT NULL DEFAULT 0,
             stock_pieces     INTEGER NOT NULL DEFAULT 0,
             reorder_level    INTEGER NOT NULL DEFAULT 10,
+            is_active        INTEGER NOT NULL DEFAULT 1,
             created_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
             updated_at       TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
         )
     """)
+    
+    # --- Migration: add is_active to products if it doesn't exist ---
+    try:
+        cursor.execute("ALTER TABLE products ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1")
+    except sqlite3.OperationalError:
+        pass  # Column already exists
 
     # ------------------------------------------------------------------
     # SACK PURCHASES  (records every bulk sack bought)

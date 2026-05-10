@@ -5,7 +5,7 @@ inventory_panel.py  –  Full CRUD for products + sack stock additions.
 import tkinter as tk
 from tkinter import ttk, messagebox
 from logic.inventory_logic import (get_all_products, add_product, update_product,
-                                   delete_product, add_stock)
+                                   delete_product, add_stock, toggle_archive_product)
 from auth.auth_manager import get_current_user
 import utils.theme as T
 
@@ -26,11 +26,12 @@ class InventoryPanel(tk.Frame):
                  font=("Segoe UI", 16, "bold"), bg=T.BG, fg=T.FG).pack(side="left")
 
         for label, cmd in [
-            ("⟳ Refresh",     self.refresh),
-            ("+ Add Product",  self._open_add),
-            ("✎ Edit",         self._open_edit),
-            ("🗑 Delete",       self._delete),
-            ("📦 Add Stock",    self._open_stock),
+            ("⟳ Refresh",      self.refresh),
+            ("+ Add Product",   self._open_add),
+            ("✎ Edit",          self._open_edit),
+            ("🗑 Delete",        self._delete),
+            ("📦 Add Stock",     self._open_stock),
+            ("👁 Archive/Unarchive", self._toggle_archive),
         ]:
             tk.Button(bar, text=label, font=("Segoe UI", 9),
                       bg=T.SECONDARY, fg=T.FG, relief="flat", cursor="hand2",
@@ -52,16 +53,16 @@ class InventoryPanel(tk.Frame):
         frame.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
         style = T.apply_treeview_style("Inv.Treeview")
-        cols = ("id","name","category","buy","sell","bundle","stock","reorder")
+        cols = ("no","name","category","buy","sell","bundle","stock","reorder")
         self._tree = ttk.Treeview(frame, columns=cols,
                                   show="headings", style=style)
 
-        hdrs = [("id","ID",40),("name","Product Name",200),
+        hdrs = [("no","No.",40),("name","Product Name",200),
                 ("category","Category",100),("buy","Buy/Sack (₱)",110),
                 ("sell","Sell/Unit (₱)",110),("bundle","Bundle Qty",90),
                 ("stock","Stock (pcs)",100),("reorder","Reorder Lvl",100)]
         for col, text, w in hdrs:
-            self._tree.heading(col, text=text)
+            self._tree.heading(col, text=text, command=lambda c=col: self._sort_tree(c, False))
             self._tree.column(col, width=w, anchor="center" if col != "name" else "w")
 
         vsb = ttk.Scrollbar(frame, orient="vertical", command=self._tree.yview)
@@ -80,15 +81,35 @@ class InventoryPanel(tk.Frame):
 
     def _populate(self, rows: list[dict]):
         self._tree.delete(*self._tree.get_children())
-        for p in rows:
-            tag = "low" if p["stock_pieces"] <= p["reorder_level"] else ""
-            self._tree.insert("", "end", iid=str(p["id"]), tags=(tag,),
-                              values=(p["id"], p["name"], p["category"],
+        for i, p in enumerate(rows, start=1):
+            tags = []
+            if p["is_active"] == 0:
+                tags.append("archived")
+            elif p["stock_pieces"] <= p["reorder_level"]:
+                tags.append("low")
+                
+            self._tree.insert("", "end", iid=str(p["id"]), tags=tuple(tags),
+                              values=(i, p["name"], p["category"],
                                       f"₱{p['buying_price']:,.2f}",
                                       f"₱{p['selling_price']:,.2f}",
                                       p["bundle_qty"],
                                       p["stock_pieces"], p["reorder_level"]))
         self._tree.tag_configure("low", foreground="#ffd166")
+        self._tree.tag_configure("archived", foreground="#666666", font=("Segoe UI", 10, "italic"))
+
+    def _sort_tree(self, col, reverse):
+        l = [(self._tree.set(k, col), k) for k in self._tree.get_children('')]
+        try:
+            # Try numeric sort first, strip peso signs/commas
+            l.sort(key=lambda t: float(t[0].replace('₱', '').replace(',', '')), reverse=reverse)
+        except ValueError:
+            # Fallback to string sort
+            l.sort(key=lambda t: t[0].lower(), reverse=reverse)
+
+        for index, (val, k) in enumerate(l):
+            self._tree.move(k, '', index)
+            
+        self._tree.heading(col, command=lambda: self._sort_tree(col, not reverse))
 
     def _filter(self):
         q = self._search_var.get().lower()
@@ -125,6 +146,22 @@ class InventoryPanel(tk.Frame):
         ok, msg = delete_product(p["id"], user["id"], user["username"])
         if ok:
             messagebox.showinfo("Deleted", msg)
+            self.refresh()
+        else:
+            messagebox.showerror("Error", msg)
+
+    def _toggle_archive(self):
+        p = self._selected_product()
+        if not p: return
+        
+        status = "Archive" if p["is_active"] == 1 else "Unarchive/Restore"
+        if not messagebox.askyesno(status, f"{status} '{p['name']}'?\n\nArchived products are hidden from the POS register but kept in history."):
+            return
+            
+        user = get_current_user()
+        ok, msg = toggle_archive_product(p["id"], user["id"], user["username"])
+        if ok:
+            messagebox.showinfo("Success", msg)
             self.refresh()
         else:
             messagebox.showerror("Error", msg)
@@ -170,6 +207,13 @@ class _ProductDialog(tk.Toplevel):
         f = tk.Frame(self, bg=T.CARD, padx=30, pady=20)
         f.pack(fill="both", expand=True)
 
+        if self.mode == "add":
+            desc = "Create a new product listing. Fill in the wholesale sack price and retail unit price."
+        else:
+            desc = "Modify the details of this product. Prices and reorder limits can be updated here."
+            
+        tk.Label(f, text=desc, font=("Segoe UI", 9), bg=T.CARD, fg=T.FG_DIM, wraplength=360, justify="left").grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 15))
+
         self.v_name    = tk.StringVar()
         self.v_cat     = tk.StringVar(value=CATEGORIES[0])
         self.v_buy     = tk.StringVar()
@@ -177,21 +221,21 @@ class _ProductDialog(tk.Toplevel):
         self.v_bundle  = tk.StringVar(value="1")
         self.v_reorder = tk.StringVar(value="10")
 
-        self._field(f, "Product Name",   self.v_name,    0)
+        self._field(f, "Product Name",   self.v_name,    1)
         tk.Label(f, text="Category", font=("Segoe UI", 9),
-                 bg=T.CARD, fg=T.FG_DIM).grid(row=1, column=0, sticky="w", pady=4)
+                 bg=T.CARD, fg=T.FG_DIM).grid(row=2, column=0, sticky="w", pady=4)
         ttk.Combobox(f, textvariable=self.v_cat, values=CATEGORIES,
                      state="readonly", width=26
-                     ).grid(row=1, column=1, padx=(12, 0), pady=4)
-        self._field(f, "Buying Price/Sack (₱)", self.v_buy,     2)
-        self._field(f, "Selling Price/Unit (₱)", self.v_sell,   3)
-        self._field(f, "Bundle Qty (pcs/unit)",  self.v_bundle,  4)
-        self._field(f, "Reorder Level (pcs)",    self.v_reorder, 5)
+                     ).grid(row=2, column=1, padx=(12, 0), pady=4)
+        self._field(f, "Buying Price/Sack (₱)", self.v_buy,     3)
+        self._field(f, "Selling Price/Unit (₱)", self.v_sell,   4)
+        self._field(f, "Bundle Qty (pcs/unit)",  self.v_bundle,  5)
+        self._field(f, "Reorder Level (pcs)",    self.v_reorder, 6)
 
         tk.Button(f, text="Save", font=("Segoe UI", 10, "bold"),
                   bg=T.ACCENT, fg=T.FG, relief="flat", cursor="hand2",
                   pady=8, command=self._save).grid(
-                  row=6, column=0, columnspan=2, sticky="ew", pady=(20, 0))
+                  row=7, column=0, columnspan=2, sticky="ew", pady=(20, 0))
 
     def _populate(self):
         p = self.product

@@ -135,7 +135,7 @@ class PosPanel(tk.Frame):
     # ── Product list ──────────────────────────────────────────────────
 
     def _load_products(self):
-        self._products = get_all_products()
+        self._products = get_all_products(include_archived=False)
         self._display_products(self._products)
 
     def _display_products(self, products):

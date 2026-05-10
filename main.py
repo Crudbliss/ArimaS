@@ -27,7 +27,8 @@ def _ensure_dependencies():
         "matplotlib": "matplotlib", 
         "pandas": "pandas", 
         "sqlalchemy": "sqlalchemy",
-        "sklearn": "scikit-learn"
+        "sklearn": "scikit-learn",
+        "tkcalendar": "tkcalendar"
     }
     missing = []
     for pkg, pip_name in required.items():

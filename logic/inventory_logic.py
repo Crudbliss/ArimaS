@@ -7,18 +7,23 @@ from database.db_setup import get_connection
 from utils.logger import log_action
 
 
-def get_all_products() -> list[dict]:
+def get_all_products(include_archived=True) -> list[dict]:
     conn = get_connection()
     cursor = conn.cursor()
-    cursor.execute("""
+    query = """
         SELECT id, name, category, buying_price, selling_price,
-               bundle_qty, pieces_per_sack, stock_pieces, reorder_level
-        FROM products ORDER BY category, name
-    """)
+               bundle_qty, pieces_per_sack, stock_pieces, reorder_level, is_active
+        FROM products 
+    """
+    if not include_archived:
+        query += " WHERE is_active = 1 "
+    query += " ORDER BY category, name"
+    
+    cursor.execute(query)
     rows = cursor.fetchall()
     conn.close()
     cols = ["id","name","category","buying_price","selling_price",
-            "bundle_qty","pieces_per_sack","stock_pieces","reorder_level"]
+            "bundle_qty","pieces_per_sack","stock_pieces","reorder_level","is_active"]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -26,14 +31,14 @@ def get_product_by_id(product_id: int) -> dict | None:
     conn = get_connection()
     row = conn.execute(
         "SELECT id,name,category,buying_price,selling_price,bundle_qty,"
-        "pieces_per_sack,stock_pieces,reorder_level FROM products WHERE id=?",
+        "pieces_per_sack,stock_pieces,reorder_level,is_active FROM products WHERE id=?",
         (product_id,)
     ).fetchone()
     conn.close()
     if not row:
         return None
     cols = ["id","name","category","buying_price","selling_price",
-            "bundle_qty","pieces_per_sack","stock_pieces","reorder_level"]
+            "bundle_qty","pieces_per_sack","stock_pieces","reorder_level","is_active"]
     return dict(zip(cols, row))
 
 
@@ -143,3 +148,26 @@ def get_dashboard_stats() -> dict:
         "today_revenue":  today_revenue,
         "total_stock":    total_stock,
     }
+
+def toggle_archive_product(product_id: int, user_id: int, username: str) -> tuple[bool, str]:
+    try:
+        conn = get_connection()
+        row = conn.execute("SELECT name, is_active FROM products WHERE id=?", (product_id,)).fetchone()
+        if not row:
+            conn.close()
+            return False, "Product not found."
+            
+        name, current_status = row
+        new_status = 0 if current_status == 1 else 1
+        
+        conn.execute("UPDATE products SET is_active = ?, updated_at=datetime('now','localtime') WHERE id=?", (new_status, product_id))
+        conn.commit()
+        conn.close()
+        
+        action = "ARCHIVE_PRODUCT" if new_status == 0 else "UNARCHIVE_PRODUCT"
+        status_str = "Archived" if new_status == 0 else "Restored"
+        log_action(user_id, username, action, f"{status_str}: {name}")
+        
+        return True, f"'{name}' has been {status_str.lower()}."
+    except sqlite3.Error as e:
+        return False, str(e)

@@ -146,3 +146,61 @@ def refund_sale(sale_id: int, user_id: int, username: str) -> tuple[bool, str]:
     finally:
         conn.close()
 
+def get_custom_report(start_date: str, end_date: str) -> dict:
+    """Fetch sales report data for a specific date range (YYYY-MM-DD format)."""
+    conn = get_connection()
+    try:
+        # Summary
+        summary_row = conn.execute("""
+            SELECT 
+                COALESCE(SUM(CASE WHEN status='completed' THEN total_amount ELSE 0 END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN status='completed' THEN qty_sold ELSE 0 END), 0) as items_sold,
+                SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) as refund_count
+            FROM sales
+            WHERE date(sold_at) >= ? AND date(sold_at) <= ?
+        """, (start_date, end_date)).fetchone()
+        
+        # Top Sellers (only completed sales)
+        top_rows = conn.execute("""
+            SELECT p.name, p.category, SUM(s.qty_sold) as total_qty, SUM(s.total_amount) as total_rev
+            FROM sales s
+            JOIN products p ON s.product_id = p.id
+            WHERE s.status = 'completed' AND date(s.sold_at) >= ? AND date(s.sold_at) <= ?
+            GROUP BY p.id
+            ORDER BY total_qty DESC
+            LIMIT 10
+        """, (start_date, end_date)).fetchall()
+        
+        top_sellers = [
+            {"name": r[0], "category": r[1], "qty": r[2], "revenue": r[3]} for r in top_rows
+        ]
+        
+        # Chart Data (Daily or Hourly Revenue)
+        if start_date == end_date:
+            chart_rows = conn.execute("""
+                SELECT strftime('%H:00', sold_at) as dt, SUM(total_amount) as daily_rev
+                FROM sales
+                WHERE status = 'completed' AND date(sold_at) = ?
+                GROUP BY dt
+                ORDER BY dt ASC
+            """, (start_date,)).fetchall()
+        else:
+            chart_rows = conn.execute("""
+                SELECT date(sold_at) as dt, SUM(total_amount) as daily_rev
+                FROM sales
+                WHERE status = 'completed' AND date(sold_at) >= ? AND date(sold_at) <= ?
+                GROUP BY dt
+                ORDER BY dt ASC
+            """, (start_date, end_date)).fetchall()
+        
+        chart_data = [{"date": r[0], "revenue": r[1]} for r in chart_rows]
+        
+        return {
+            "total_revenue": summary_row[0],
+            "items_sold": summary_row[1],
+            "refund_count": summary_row[2] or 0,
+            "top_sellers": top_sellers,
+            "chart_data": chart_data
+        }
+    finally:
+        conn.close()

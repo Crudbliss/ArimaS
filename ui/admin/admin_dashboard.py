@@ -90,6 +90,7 @@ class AdminDashboard:
             ("home",      "🏠   Dashboard"),
             ("inventory", "📦   Inventory"),
             ("forecast",  "📈   Forecast"),
+            ("reports",   "📊   Sales Reports"),
             ("logs",      "📋   Activity Logs"),
             ("users",     "👥   User Manager"),
         ]
@@ -126,11 +127,13 @@ class AdminDashboard:
         from ui.admin.logs_panel      import LogsPanel
         from ui.admin.user_manager    import UserManagerPanel
         from ui.admin.forecast_panel  import ForecastPanel
+        from ui.admin.reports_panel   import ReportsPanel
 
         self._panels = {
-            "home":      HomePanel(self.content),
+            "home":      HomePanel(self.content, on_navigate=self._show),
             "inventory": InventoryPanel(self.content),
             "forecast":  ForecastPanel(self.content),
+            "reports":   ReportsPanel(self.content),
             "logs":      LogsPanel(self.content),
             "users":     UserManagerPanel(self.content),
         }
