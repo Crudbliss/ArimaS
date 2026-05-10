@@ -6,7 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from database.db_setup import get_connection
 from auth.auth_manager import get_current_user
-from utils.theme import BG, CARD, SECONDARY, FG, FG_DIM, apply_treeview_style
+import utils.theme as T
 
 
 def _fetch_logs(user_id: int | None = None) -> list[tuple]:
@@ -29,37 +29,37 @@ def _fetch_logs(user_id: int | None = None) -> list[tuple]:
 
 class LogsPanel(tk.Frame):
     def __init__(self, parent, own_only: bool = False):
-        super().__init__(parent, bg=BG)
+        super().__init__(parent, bg=T.BG)
         self._own_only = own_only
         self._build()
 
     def _build(self):
-        bar = tk.Frame(self, bg=BG)
+        bar = tk.Frame(self, bg=T.BG)
         bar.pack(fill="x", padx=24, pady=(20, 6))
 
         title = "My Activity Log" if self._own_only else "Activity Logs (All Users)"
         tk.Label(bar, text=title, font=("Segoe UI", 16, "bold"),
-                 bg=BG, fg=FG).pack(side="left")
+                 bg=T.BG, fg=T.FG).pack(side="left")
         tk.Button(bar, text="⟳  Refresh", font=("Segoe UI", 9),
-                  bg=SECONDARY, fg=FG, relief="flat", cursor="hand2",
+                  bg=T.SECONDARY, fg=T.FG, relief="flat", cursor="hand2",
                   padx=10, pady=4, command=self.refresh).pack(side="right")
 
         # Search
-        sr = tk.Frame(self, bg=BG)
+        sr = tk.Frame(self, bg=T.BG)
         sr.pack(fill="x", padx=24, pady=(0, 8))
         tk.Label(sr, text="Filter:", font=("Segoe UI", 9),
-                 bg=BG, fg=FG_DIM).pack(side="left")
+                 bg=T.BG, fg=T.FG_DIM).pack(side="left")
         self._q = tk.StringVar()
         self._q.trace_add("write", lambda *_: self._filter())
         tk.Entry(sr, textvariable=self._q, font=("Segoe UI", 10),
-                 bg=SECONDARY, fg=FG, insertbackground=FG,
+                 bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG,
                  relief="flat", width=30).pack(side="left", padx=8, ipady=4)
 
         # Treeview
-        frame = tk.Frame(self, bg=CARD)
+        frame = tk.Frame(self, bg=T.CARD)
         frame.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
-        style = apply_treeview_style("Logs.Treeview")
+        style = T.apply_treeview_style("Logs.Treeview")
         cols = ("id", "time", "user", "action", "details")
         self._tree = ttk.Treeview(frame, columns=cols,
                                   show="headings", style=style)

@@ -92,10 +92,21 @@ def create_tables(conn: sqlite3.Connection):
             qty_sold     INTEGER NOT NULL,
             unit_price   REAL    NOT NULL,
             total_amount REAL    NOT NULL,
+            tendered     REAL    NOT NULL DEFAULT 0,
+            change       REAL    NOT NULL DEFAULT 0,
+            status       TEXT    NOT NULL DEFAULT 'completed',
             served_by    INTEGER NOT NULL REFERENCES users(id),
             sold_at      TEXT    NOT NULL DEFAULT (datetime('now', 'localtime'))
         )
     """)
+
+    # --- Migration: add columns to existing sales table if they don't exist ---
+    try:
+        cursor.execute("ALTER TABLE sales ADD COLUMN tendered REAL NOT NULL DEFAULT 0")
+        cursor.execute("ALTER TABLE sales ADD COLUMN change REAL NOT NULL DEFAULT 0")
+        cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'")
+    except sqlite3.OperationalError:
+        pass  # Columns already exist
 
     # ------------------------------------------------------------------
     # ACTIVITY LOGS  (audit trail for every significant action)

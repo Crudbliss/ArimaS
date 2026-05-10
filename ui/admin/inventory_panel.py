@@ -7,23 +7,23 @@ from tkinter import ttk, messagebox
 from logic.inventory_logic import (get_all_products, add_product, update_product,
                                    delete_product, add_stock)
 from auth.auth_manager import get_current_user
-from utils.theme import BG, CARD, ACCENT, SECONDARY, FG, FG_DIM, apply_treeview_style
+import utils.theme as T
 
 CATEGORIES = ["Tops", "Bottoms", "Outerwear", "Kids", "Other"]
 
 
 class InventoryPanel(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg=BG)
+        super().__init__(parent, bg=T.BG)
         self._build()
 
     def _build(self):
         # ── Toolbar ──────────────────────────────────────────────────
-        bar = tk.Frame(self, bg=BG)
+        bar = tk.Frame(self, bg=T.BG)
         bar.pack(fill="x", padx=24, pady=(20, 6))
 
         tk.Label(bar, text="Inventory Management",
-                 font=("Segoe UI", 16, "bold"), bg=BG, fg=FG).pack(side="left")
+                 font=("Segoe UI", 16, "bold"), bg=T.BG, fg=T.FG).pack(side="left")
 
         for label, cmd in [
             ("⟳ Refresh",     self.refresh),
@@ -33,25 +33,25 @@ class InventoryPanel(tk.Frame):
             ("📦 Add Stock",    self._open_stock),
         ]:
             tk.Button(bar, text=label, font=("Segoe UI", 9),
-                      bg=SECONDARY, fg=FG, relief="flat", cursor="hand2",
+                      bg=T.SECONDARY, fg=T.FG, relief="flat", cursor="hand2",
                       padx=10, pady=4, command=cmd).pack(side="right", padx=3)
 
         # ── Search ───────────────────────────────────────────────────
-        search_row = tk.Frame(self, bg=BG)
+        search_row = tk.Frame(self, bg=T.BG)
         search_row.pack(fill="x", padx=24, pady=(0, 8))
         tk.Label(search_row, text="Search:", font=("Segoe UI", 9),
-                 bg=BG, fg=FG_DIM).pack(side="left")
+                 bg=T.BG, fg=T.FG_DIM).pack(side="left")
         self._search_var = tk.StringVar()
         self._search_var.trace_add("write", lambda *_: self._filter())
         tk.Entry(search_row, textvariable=self._search_var, font=("Segoe UI", 10),
-                 bg=SECONDARY, fg=FG, insertbackground=FG, relief="flat",
+                 bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG, relief="flat",
                  width=30).pack(side="left", padx=8, ipady=4)
 
         # ── Treeview ─────────────────────────────────────────────────
-        frame = tk.Frame(self, bg=CARD)
+        frame = tk.Frame(self, bg=T.CARD)
         frame.pack(fill="both", expand=True, padx=24, pady=(0, 20))
 
-        style = apply_treeview_style("Inv.Treeview")
+        style = T.apply_treeview_style("Inv.Treeview")
         cols = ("id","name","category","buy","sell","bundle","stock","reorder")
         self._tree = ttk.Treeview(frame, columns=cols,
                                   show="headings", style=style)
@@ -144,7 +144,7 @@ class _ProductDialog(tk.Toplevel):
         self.product  = product
         self.on_save  = on_save
         self.title("Add Product" if mode == "add" else "Edit Product")
-        self.configure(bg=CARD)
+        self.configure(bg=T.CARD)
         self.resizable(False, False)
         self.grab_set()
         self._build()
@@ -159,15 +159,15 @@ class _ProductDialog(tk.Toplevel):
 
     def _field(self, parent, label, var, row):
         tk.Label(parent, text=label, font=("Segoe UI", 9),
-                 bg=CARD, fg=FG_DIM).grid(row=row, column=0, sticky="w", pady=4)
+                 bg=T.CARD, fg=T.FG_DIM).grid(row=row, column=0, sticky="w", pady=4)
         e = tk.Entry(parent, textvariable=var, font=("Segoe UI", 10),
-                     bg=SECONDARY, fg=FG, insertbackground=FG,
+                     bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG,
                      relief="flat", width=28)
         e.grid(row=row, column=1, padx=(12, 0), pady=4, ipady=4)
         return e
 
     def _build(self):
-        f = tk.Frame(self, bg=CARD, padx=30, pady=20)
+        f = tk.Frame(self, bg=T.CARD, padx=30, pady=20)
         f.pack(fill="both", expand=True)
 
         self.v_name    = tk.StringVar()
@@ -179,7 +179,7 @@ class _ProductDialog(tk.Toplevel):
 
         self._field(f, "Product Name",   self.v_name,    0)
         tk.Label(f, text="Category", font=("Segoe UI", 9),
-                 bg=CARD, fg=FG_DIM).grid(row=1, column=0, sticky="w", pady=4)
+                 bg=T.CARD, fg=T.FG_DIM).grid(row=1, column=0, sticky="w", pady=4)
         ttk.Combobox(f, textvariable=self.v_cat, values=CATEGORIES,
                      state="readonly", width=26
                      ).grid(row=1, column=1, padx=(12, 0), pady=4)
@@ -189,7 +189,7 @@ class _ProductDialog(tk.Toplevel):
         self._field(f, "Reorder Level (pcs)",    self.v_reorder, 5)
 
         tk.Button(f, text="Save", font=("Segoe UI", 10, "bold"),
-                  bg=ACCENT, fg=FG, relief="flat", cursor="hand2",
+                  bg=T.ACCENT, fg=T.FG, relief="flat", cursor="hand2",
                   pady=8, command=self._save).grid(
                   row=6, column=0, columnspan=2, sticky="ew", pady=(20, 0))
 
@@ -241,7 +241,7 @@ class _AddStockDialog(tk.Toplevel):
         self.product = product
         self.on_save = on_save
         self.title(f"Add Stock — {product['name']}")
-        self.configure(bg=CARD)
+        self.configure(bg=T.CARD)
         self.resizable(False, False)
         self.grab_set()
         self._build()
@@ -250,15 +250,15 @@ class _AddStockDialog(tk.Toplevel):
         self.geometry(f"400x360+{(sw-400)//2}+{(sh-360)//2}")
 
     def _build(self):
-        f = tk.Frame(self, bg=CARD, padx=30, pady=20)
+        f = tk.Frame(self, bg=T.CARD, padx=30, pady=20)
         f.pack(fill="both", expand=True)
 
         # Header info
         tk.Label(f, text=f"Product: {self.product['name']}",
-                 font=("Segoe UI", 11, "bold"), bg=CARD, fg=FG).pack(anchor="w")
+                 font=("Segoe UI", 11, "bold"), bg=T.CARD, fg=T.FG).pack(anchor="w")
         tk.Label(f, text=f"Current Stock: {self.product['stock_pieces']} pcs  |  "
                          f"Default: {self.product['pieces_per_sack']} pcs/sack",
-                 font=("Segoe UI", 9), bg=CARD, fg=FG_DIM).pack(anchor="w", pady=(2, 16))
+                 font=("Segoe UI", 9), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w", pady=(2, 16))
 
         # Sacks Bought
         self.v_sacks = tk.StringVar(value="1")
@@ -270,21 +270,21 @@ class _AddStockDialog(tk.Toplevel):
         self._row(f, "Pieces per Sack:", self.v_pps)
 
         tk.Label(f, text="↑ Pre-filled from product default — edit if needed",
-                 font=("Segoe UI", 8), bg=CARD, fg=FG_DIM).pack(anchor="w", pady=(0, 10))
+                 font=("Segoe UI", 8), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w", pady=(0, 10))
 
         # Total Pieces (auto-calculated, but editable)
         self.v_total = tk.StringVar()
-        total_row = tk.Frame(f, bg=CARD)
+        total_row = tk.Frame(f, bg=T.CARD)
         total_row.pack(fill="x", pady=4)
         tk.Label(total_row, text="Total Pieces:", font=("Segoe UI", 9),
-                 bg=CARD, fg=FG_DIM, width=18, anchor="w").pack(side="left")
+                 bg=T.CARD, fg=T.FG_DIM, width=18, anchor="w").pack(side="left")
         self._total_entry = tk.Entry(total_row, textvariable=self.v_total,
                                      font=("Segoe UI", 10), bg="#0f4a30",
                                      fg="#06d6a0", insertbackground="#06d6a0",
                                      relief="flat", width=14)
         self._total_entry.pack(side="left", ipady=4, padx=(8, 0))
         tk.Label(total_row, text=" ← editable", font=("Segoe UI", 8),
-                 bg=CARD, fg=FG_DIM).pack(side="left", padx=6)
+                 bg=T.CARD, fg=T.FG_DIM).pack(side="left", padx=6)
 
         # Auto-calculate on sacks/pps change
         self.v_sacks.trace_add("write", lambda *_: self._recalculate())
@@ -292,16 +292,16 @@ class _AddStockDialog(tk.Toplevel):
         self._recalculate()
 
         tk.Button(f, text="Add to Stock", font=("Segoe UI", 10, "bold"),
-                  bg=ACCENT, fg=FG, relief="flat", cursor="hand2",
+                  bg=T.ACCENT, fg=T.FG, relief="flat", cursor="hand2",
                   pady=8, command=self._save).pack(fill="x", pady=(20, 0))
 
     def _row(self, parent, label, var):
-        r = tk.Frame(parent, bg=CARD)
+        r = tk.Frame(parent, bg=T.CARD)
         r.pack(fill="x", pady=4)
         tk.Label(r, text=label, font=("Segoe UI", 9),
-                 bg=CARD, fg=FG_DIM, width=18, anchor="w").pack(side="left")
+                 bg=T.CARD, fg=T.FG_DIM, width=18, anchor="w").pack(side="left")
         tk.Entry(r, textvariable=var, font=("Segoe UI", 10),
-                 bg=SECONDARY, fg=FG, insertbackground=FG,
+                 bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG,
                  relief="flat", width=14).pack(side="left", ipady=4, padx=(8, 0))
 
     def _recalculate(self):

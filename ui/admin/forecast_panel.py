@@ -18,7 +18,7 @@ from logic.forecast_logic import (
     get_all_products_basic,
 )
 import utils.theme as T
-from utils.theme import apply_treeview_style
+import utils.theme as T
 
 MODELS = ["Both", "ARIMA", "Random Forest"]
 
@@ -102,7 +102,7 @@ class ForecastPanel(tk.Frame):
         rec_frame = tk.Frame(right, bg=T.CARD)
         rec_frame.pack(fill="both", expand=True)
 
-        style = apply_treeview_style("Rec.Treeview")
+        style = T.apply_treeview_style("Rec.Treeview")
         cols  = ("status", "name", "stock", "demand", "order")
         self._rec_tree = ttk.Treeview(rec_frame, columns=cols,
                                       show="headings", style=style)
@@ -123,6 +123,25 @@ class ForecastPanel(tk.Frame):
         vsb.pack(side="right", fill="y")
         self._rec_tree.pack(fill="both", expand=True)
 
+        # Explanations Legend
+        legend_frame = tk.Frame(right, bg=T.BG, pady=10)
+        legend_frame.pack(fill="x", side="bottom")
+
+        tk.Label(legend_frame, text="💡 What do these mean?", font=("Segoe UI", 9, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 4))
+        
+        explanations = [
+            ("Actual:", "Real sales data that has already happened in the past."),
+            ("ARIMA:", "A mathematical model predicting future trends based on past sales patterns."),
+            ("Random Forest:", "An AI model predicting sales by learning multiple complex factors (like day of week).")
+        ]
+        
+        for title, desc in explanations:
+            f = tk.Frame(legend_frame, bg=T.BG)
+            f.pack(fill="x", pady=1)
+            tk.Label(f, text=title, font=("Segoe UI", 8, "bold"), bg=T.BG, fg=T.FG_DIM, width=12, anchor="w").pack(side="left")
+            tk.Label(f, text=desc, font=("Segoe UI", 8), bg=T.BG, fg=T.FG_DIM, wraplength=260, justify="left").pack(side="left")
+
+
         self._rec_tree.bind("<<TreeviewSelect>>", self._on_rec_select)
         self._load_products()
 
@@ -137,6 +156,8 @@ class ForecastPanel(tk.Frame):
     def refresh(self):
         self._load_products()
         self._load_recommendations()
+        if self._products:
+            self._run_forecast()
 
     # ── Rec row click ─────────────────────────────────────────────────
 

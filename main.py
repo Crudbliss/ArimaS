@@ -8,9 +8,27 @@ import tkinter as tk
 import sys
 import os
 import subprocess
+import ctypes
+
+def load_custom_fonts():
+    if os.name == 'nt':
+        font_dir = os.path.join(os.path.dirname(__file__), "font")
+        for f in ["TrajanP3.otf", "ClashDisplay-Regular.otf", "Lato-Bold.ttf"]:
+            fpath = os.path.join(font_dir, f)
+            if os.path.exists(fpath):
+                ctypes.windll.gdi32.AddFontResourceW(fpath)
+
+load_custom_fonts()
+
 
 def _ensure_dependencies():
-    required = {"statsmodels": "statsmodels", "matplotlib": "matplotlib", "pandas": "pandas", "sqlalchemy": "sqlalchemy"}
+    required = {
+        "statsmodels": "statsmodels", 
+        "matplotlib": "matplotlib", 
+        "pandas": "pandas", 
+        "sqlalchemy": "sqlalchemy",
+        "sklearn": "scikit-learn"
+    }
     missing = []
     for pkg, pip_name in required.items():
         try:
@@ -51,10 +69,9 @@ def on_logout():
     from auth.auth_manager import logout
     logout()
 
-    # Destroy any open Toplevel windows
+    # Destroy all widgets in root to prevent stacking duplicate login screens
     for widget in root.winfo_children():
-        if isinstance(widget, tk.Toplevel):
-            widget.destroy()
+        widget.destroy()
 
     # Re-show and reset the login window
     root.deiconify()

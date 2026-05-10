@@ -9,7 +9,7 @@ from database.db_setup import get_connection
 from auth.auth_manager import get_current_user
 from utils.validators import validate_password, validate_username
 from utils.logger import log_action
-from utils.theme import BG, CARD, ACCENT, SECONDARY, FG, FG_DIM, apply_treeview_style
+import utils.theme as T
 
 
 def _get_all_users() -> list[tuple]:
@@ -59,28 +59,28 @@ def _create_user(username: str, password: str, role: str) -> tuple[bool, str]:
 
 class UserManagerPanel(tk.Frame):
     def __init__(self, parent):
-        super().__init__(parent, bg=BG)
+        super().__init__(parent, bg=T.BG)
         self._build()
 
     def _build(self):
-        bar = tk.Frame(self, bg=BG)
+        bar = tk.Frame(self, bg=T.BG)
         bar.pack(fill="x", padx=24, pady=(20, 6))
 
         tk.Label(bar, text="User Manager",
-                 font=("Segoe UI", 16, "bold"), bg=BG, fg=FG).pack(side="left")
+                 font=("Segoe UI", 16, "bold"), bg=T.BG, fg=T.FG).pack(side="left")
 
         for label, cmd in [("⟳ Refresh", self.refresh),
                            ("+ Add User", self._open_add),
                            ("⏻ Toggle Active", self._toggle)]:
             tk.Button(bar, text=label, font=("Segoe UI", 9),
-                      bg=SECONDARY, fg=FG, relief="flat", cursor="hand2",
+                      bg=T.SECONDARY, fg=T.FG, relief="flat", cursor="hand2",
                       padx=10, pady=4, command=cmd).pack(side="right", padx=3)
 
         # Treeview
-        frame = tk.Frame(self, bg=CARD)
+        frame = tk.Frame(self, bg=T.CARD)
         frame.pack(fill="both", expand=True, padx=24, pady=(8, 20))
 
-        style = apply_treeview_style("User.Treeview")
+        style = T.apply_treeview_style("User.Treeview")
         cols = ("id", "username", "role", "status", "created")
         self._tree = ttk.Treeview(frame, columns=cols,
                                   show="headings", style=style)
@@ -104,7 +104,7 @@ class UserManagerPanel(tk.Frame):
         for r in rows:
             tag = "inactive" if r[3] == "Inactive" else ""
             self._tree.insert("", "end", iid=str(r[0]), values=r, tags=(tag,))
-        self._tree.tag_configure("inactive", foreground=FG_DIM)
+        self._tree.tag_configure("inactive", foreground=T.FG_DIM)
 
     def _selected(self):
         sel = self._tree.selection()
@@ -140,7 +140,7 @@ class _AddUserDialog(tk.Toplevel):
         super().__init__(parent)
         self.on_save = on_save
         self.title("Create New User")
-        self.configure(bg=CARD)
+        self.configure(bg=T.CARD)
         self.resizable(False, False)
         self.grab_set()
         self._build()
@@ -149,11 +149,11 @@ class _AddUserDialog(tk.Toplevel):
         self.geometry(f"400x380+{(sw-400)//2}+{(sh-380)//2}")
 
     def _build(self):
-        f = tk.Frame(self, bg=CARD, padx=30, pady=24)
+        f = tk.Frame(self, bg=T.CARD, padx=30, pady=24)
         f.pack(fill="both", expand=True)
 
         tk.Label(f, text="New User Account",
-                 font=("Segoe UI", 13, "bold"), bg=CARD, fg=FG).pack(anchor="w", pady=(0,16))
+                 font=("Segoe UI", 13, "bold"), bg=T.CARD, fg=T.FG).pack(anchor="w", pady=(0,16))
 
         self.v_user = tk.StringVar()
         self.v_pass = tk.StringVar()
@@ -163,27 +163,27 @@ class _AddUserDialog(tk.Toplevel):
         for label, var, show in [("Username", self.v_user, False),
                                   ("Password", self.v_pass, True)]:
             tk.Label(f, text=label, font=("Segoe UI", 9),
-                     bg=CARD, fg=FG_DIM).pack(anchor="w")
+                     bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
             tk.Entry(f, textvariable=var, font=("Segoe UI", 10),
-                     bg=SECONDARY, fg=FG, insertbackground=FG,
+                     bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG,
                      relief="flat", show="●" if show else ""
                      ).pack(fill="x", pady=(3, 12), ipady=5)
 
         tk.Label(f, text="Role", font=("Segoe UI", 9),
-                 bg=CARD, fg=FG_DIM).pack(anchor="w")
-        role_frame = tk.Frame(f, bg=CARD)
+                 bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
+        role_frame = tk.Frame(f, bg=T.CARD)
         role_frame.pack(anchor="w", pady=(3, 12))
         for val, lbl in [("user","Cashier / User"), ("admin","Admin")]:
             tk.Radiobutton(role_frame, text=lbl, variable=self.v_role,
-                           value=val, bg=CARD, fg=FG, selectcolor=SECONDARY,
-                           activebackground=CARD, font=("Segoe UI", 9)
+                           value=val, bg=T.CARD, fg=T.FG, selectcolor=T.SECONDARY,
+                           activebackground=T.CARD, font=("Segoe UI", 9)
                            ).pack(side="left", padx=(0, 16))
 
         tk.Label(f, textvariable=self.v_err, font=("Segoe UI", 8),
-                 bg=CARD, fg=ACCENT, wraplength=320).pack(anchor="w")
+                 bg=T.CARD, fg=T.ACCENT, wraplength=320).pack(anchor="w")
 
         tk.Button(f, text="Create User", font=("Segoe UI", 10, "bold"),
-                  bg=ACCENT, fg=FG, relief="flat", cursor="hand2",
+                  bg=T.ACCENT, fg=T.FG, relief="flat", cursor="hand2",
                   pady=8, command=self._save).pack(fill="x", pady=(12, 0))
 
     def _save(self):

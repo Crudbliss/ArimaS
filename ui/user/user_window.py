@@ -57,7 +57,7 @@ class UserWindow:
         self._logo_btn.pack(pady=(22, 2))
 
         tk.Label(sb, text="Rosemen Ukay-Ukay",
-                 font=("Segoe UI", 10, "bold"),
+                 font=("Trajan Pro 3", 11, "bold"),
                  bg=T.CARD, fg=T.FG, justify="center").pack()
         tk.Label(sb, text="Cashier",
                  font=("Segoe UI", 8), bg=T.CARD, fg=T.FG_DIM

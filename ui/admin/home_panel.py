@@ -13,7 +13,7 @@ from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 import utils.theme as T
-from utils.theme import apply_treeview_style
+import utils.theme as T
 from logic.inventory_logic import get_dashboard_stats, get_low_stock, get_all_products
 from database.db_setup import get_connection
 
@@ -114,7 +114,7 @@ class HomePanel(tk.Frame):
         )
         tree_container = tk.Frame(self._low_section, bg=T.CARD)
 
-        style = apply_treeview_style("Home.Treeview")
+        style = T.apply_treeview_style("Home.Treeview")
         self._low_tree = ttk.Treeview(tree_container, columns=("name","stock","reorder"),
                                       show="headings", style=style, height=4)
         self._low_tree.heading("name",    text="Product")
@@ -153,7 +153,7 @@ class HomePanel(tk.Frame):
         if on_click:
             for w in (card, val_lbl, sub_lbl):
                 w.bind("<Button-1>", lambda e: on_click())
-                w.bind("<Enter>", lambda e, f=card: f.config(bg="#1f2d4a"))
+                w.bind("<Enter>", lambda e, f=card: f.config(bg=T.SECONDARY))
                 w.bind("<Leave>", lambda e, f=card: f.config(bg=T.CARD))
         return card, val_lbl, sub_lbl
 

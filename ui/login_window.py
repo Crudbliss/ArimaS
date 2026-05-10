@@ -52,7 +52,7 @@ class LoginWindow:
         tk.Label(
             header,
             text="👗 Rosemen Ukay-Ukay",
-            font=("Segoe UI", 18, "bold"),
+            font=("Trajan Pro 3", 20, "bold"),
             bg=T.CARD,
             fg=T.ACCENT,
         ).pack()
@@ -152,11 +152,14 @@ class LoginWindow:
     # ------------------------------------------------------------------
     # Actions
     # ------------------------------------------------------------------
-    def _toggle_theme(self):
+    def _do_toggle_theme(self):
         T.toggle_theme()
         for w in self.root.winfo_children():
             w.destroy()
         self._build_ui()
+
+    def _toggle_theme(self):
+        self.root.after(10, self._do_toggle_theme)
 
     def _toggle_password(self):
         self.show_pw = not self.show_pw
