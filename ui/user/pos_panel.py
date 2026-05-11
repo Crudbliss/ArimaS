@@ -18,6 +18,7 @@ class PosPanel(tk.Frame):
         self._on_logout = on_logout
         self._cart: list[dict] = []
         self._products: list[dict] = []
+        self._view_mode = tk.StringVar(value="grid")  # "list" or "grid"
         self._build()
 
     # ── Layout ────────────────────────────────────────────────────────
@@ -45,17 +46,33 @@ class PosPanel(tk.Frame):
         tk.Label(bar, text=f"👤 {user['username']}",
                  font=("Segoe UI", 9), bg=T.CARD, fg=T.FG_DIM).pack(side="right", padx=12)
 
+        # View mode toggle
+        self._toggle_btn = tk.Button(
+            bar, text="☰  List View",
+            font=("Segoe UI", 9, "bold"), bg=T.SECONDARY, fg=T.FG,
+            relief="flat", cursor="hand2", padx=12, pady=4,
+            command=self._toggle_view
+        )
+        self._toggle_btn.pack(side="right", padx=(0, 8))
+
         # Main two-column body
         body = tk.Frame(self, bg=T.BG)
         body.pack(fill="both", expand=True, padx=16, pady=12)
 
-        self._build_left(body)
+        # Left panel container — swappable
+        self._left_container = tk.Frame(body, bg=T.BG)
+        self._left_container.pack(side="left", fill="both", expand=True, padx=(0, 8))
+
+        self._build_grid_view()
         self._build_right(body)
 
-    def _build_left(self, parent):
-        left = tk.Frame(parent, bg=T.BG)
-        left.pack(side="left", fill="both", expand=True, padx=(0, 8))
+    def _build_left(self):
+        """List view — classic Treeview."""
+        for w in self._left_container.winfo_children():
+            w.destroy()
 
+        left = tk.Frame(self._left_container, bg=T.BG)
+        left.pack(fill="both", expand=True)
         tk.Label(left, text="Products", font=("Segoe UI", 12, "bold"),
                  bg=T.BG, fg=T.FG).pack(anchor="w")
 
@@ -147,11 +164,12 @@ class PosPanel(tk.Frame):
                   relief="flat", cursor="hand2", pady=5,
                   command=self._show_transactions).pack(fill="x", pady=(8, 0))
 
-    # ── Product list ──────────────────────────────────────────────────
-
     def _load_products(self):
         self._products = get_all_products(include_archived=False)
-        self._display_products(self._products)
+        if self._view_mode.get() == "grid":
+            self._render_grid(self._products)
+        else:
+            self._display_products(self._products)
 
     def _display_products(self, products):
         self._prod_tree.delete(*self._prod_tree.get_children())
@@ -168,7 +186,190 @@ class PosPanel(tk.Frame):
     def _filter_products(self):
         q = self._search_var.get().lower()
         filtered = [p for p in self._products if q in p["name"].lower()]
-        self._display_products(filtered)
+        if self._view_mode.get() == "grid":
+            self._render_grid(filtered)
+        else:
+            self._display_products(filtered)
+
+    # ── View Toggle ───────────────────────────────────────────────────
+
+    def _toggle_view(self):
+        if self._view_mode.get() == "list":
+            self._view_mode.set("grid")
+            self._toggle_btn.config(text="☰  List View")
+            self._build_grid_view()
+        else:
+            self._view_mode.set("list")
+            self._toggle_btn.config(text="⊞  Grid View")
+            self._build_left()
+
+    def _build_grid_view(self):
+        """Grid view — clickable product card tiles."""
+        for w in self._left_container.winfo_children():
+            w.destroy()
+
+        left = tk.Frame(self._left_container, bg=T.BG)
+        left.pack(fill="both", expand=True)
+
+        # Header row with search + category filter
+        hdr = tk.Frame(left, bg=T.BG)
+        hdr.pack(fill="x", pady=(0, 6))
+
+        tk.Label(hdr, text="Products", font=("Segoe UI", 12, "bold"),
+                 bg=T.BG, fg=T.FG).pack(side="left")
+
+        # Search box reuses same StringVar
+        sr = tk.Frame(left, bg=T.BG)
+        sr.pack(fill="x", pady=(4, 6))
+        tk.Label(sr, text="🔍", bg=T.BG, fg=T.FG_DIM, font=("Segoe UI", 10)).pack(side="left")
+        tk.Entry(sr, textvariable=self._search_var, font=("Segoe UI", 10),
+                 bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG, relief="flat"
+                 ).pack(side="left", fill="x", expand=True, padx=6, ipady=4)
+
+        # Category filter buttons
+        self._cat_filter = tk.StringVar(value="All")
+        cats_frame = tk.Frame(left, bg=T.BG)
+        cats_frame.pack(fill="x", pady=(0, 8))
+        categories = ["All"] + sorted(set(p["category"] for p in self._products if p.get("category")))
+        for cat in categories:
+            btn = tk.Button(
+                cats_frame, text=cat,
+                font=("Segoe UI", 8, "bold"), relief="flat", cursor="hand2",
+                padx=10, pady=4,
+                command=lambda c=cat: self._filter_by_category(c)
+            )
+            btn.pack(side="left", padx=2)
+            # Store ref so we can highlight active
+            btn._cat = cat
+
+        self._cat_btns_frame = cats_frame
+        self._update_cat_btn_styles("All")
+
+        # Scrollable canvas grid
+        canvas_frame = tk.Frame(left, bg=T.BG)
+        canvas_frame.pack(fill="both", expand=True)
+
+        self._grid_canvas = tk.Canvas(canvas_frame, bg=T.BG, highlightthickness=0)
+        vsb = ttk.Scrollbar(canvas_frame, orient="vertical", command=self._grid_canvas.yview)
+        self._grid_canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        self._grid_canvas.pack(side="left", fill="both", expand=True)
+
+        self._grid_inner = tk.Frame(self._grid_canvas, bg=T.BG)
+        self._grid_canvas.create_window((0, 0), window=self._grid_inner, anchor="nw")
+        self._grid_inner.bind("<Configure>", lambda e: self._grid_canvas.configure(
+            scrollregion=self._grid_canvas.bbox("all")
+        ))
+        # Mousewheel scroll
+        self._grid_canvas.bind_all("<MouseWheel>", lambda e: self._grid_canvas.yview_scroll(
+            int(-1*(e.delta/120)), "units"
+        ))
+
+        self._render_grid(self._products)
+
+    def _update_cat_btn_styles(self, active):
+        for btn in self._cat_btns_frame.winfo_children():
+            if hasattr(btn, "_cat"):
+                is_active = btn._cat == active
+                btn.config(
+                    bg=T.ACCENT if is_active else T.SECONDARY,
+                    fg=T.FG if is_active else T.FG_DIM
+                )
+
+    def _filter_by_category(self, cat):
+        self._cat_filter.set(cat)
+        self._update_cat_btn_styles(cat)
+        q = self._search_var.get().lower()
+        filtered = [
+            p for p in self._products
+            if (cat == "All" or p.get("category") == cat)
+            and (not q or q in p["name"].lower())
+        ]
+        self._render_grid(filtered)
+
+    CARD_COLORS = {
+        "Tops":      "#4361ee",
+        "Bottoms":   "#7209b7",
+        "Outerwear": "#3a0ca3",
+        "Kids":      "#4cc9f0",
+        "Dresses":   "#f72585",
+        "Others":    "#560bad",
+    }
+
+    def _render_grid(self, products):
+        for w in self._grid_inner.winfo_children():
+            w.destroy()
+
+        COLS = 3
+        for idx, p in enumerate(products):
+            row, col = divmod(idx, COLS)
+            out_of_stock = p["stock_pieces"] == 0
+
+            color = self.CARD_COLORS.get(p.get("category", ""), "#334155")
+            card_bg = color if not out_of_stock else "#2a2a2a"
+
+            card = tk.Frame(self._grid_inner, bg=card_bg, padx=10, pady=10,
+                            cursor="hand2" if not out_of_stock else "")
+            card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
+            self._grid_inner.columnconfigure(col, weight=1)
+
+            # Category badge
+            cat_lbl = tk.Label(card, text=p.get("category", "").upper(),
+                               font=("Segoe UI", 7, "bold"), bg=card_bg,
+                               fg="#ccccff" if not out_of_stock else "#555555")
+            cat_lbl.pack(anchor="w")
+
+            # Product name
+            tk.Label(card, text=p["name"], font=("Segoe UI", 10, "bold"),
+                     bg=card_bg, fg="#ffffff" if not out_of_stock else "#555555",
+                     wraplength=120, justify="left").pack(anchor="w", pady=(4, 6))
+
+            # Price
+            tk.Label(card, text=f"₱{p['selling_price']:,.2f}",
+                     font=("Segoe UI", 11, "bold"),
+                     bg=card_bg, fg="#ffffff" if not out_of_stock else "#555555").pack(anchor="w")
+
+            # Stock badge
+            stock_txt = f"In stock: {p['stock_pieces']}" if not out_of_stock else "OUT OF STOCK"
+            tk.Label(card, text=stock_txt, font=("Segoe UI", 7),
+                     bg=card_bg, fg="#bbffbb" if not out_of_stock else "#cc4444").pack(anchor="e", pady=(4, 0))
+
+            # Bind click to add 1 to cart
+            if not out_of_stock:
+                for widget in [card] + card.winfo_children():
+                    widget.bind("<Button-1>", lambda e, prod=p: self._grid_add_to_cart(prod))
+                    widget.bind("<Enter>", lambda e, c=card, bg=card_bg: c.config(bg=self._lighten(bg)))
+                    widget.bind("<Leave>", lambda e, c=card, bg=card_bg: c.config(bg=bg))
+
+    def _lighten(self, hex_color):
+        """Lighten a hex color slightly for hover effect."""
+        try:
+            r = min(255, int(hex_color[1:3], 16) + 20)
+            g = min(255, int(hex_color[3:5], 16) + 20)
+            b = min(255, int(hex_color[5:7], 16) + 20)
+            return f"#{r:02x}{g:02x}{b:02x}"
+        except Exception:
+            return hex_color
+
+    def _grid_add_to_cart(self, product):
+        """Single-click adds 1 unit. Clicking again increments."""
+        if product["stock_pieces"] == 0:
+            return
+        for item in self._cart:
+            if item["product_id"] == product["id"]:
+                item["qty"] += 1
+                self._refresh_cart()
+                return
+        self._cart.append({
+            "product_id": product["id"],
+            "name":       product["name"],
+            "qty":        1,
+            "unit_price": product["selling_price"],
+            "bundle_qty": product["bundle_qty"],
+        })
+        self._refresh_cart()
+
+
 
     # ── Cart ──────────────────────────────────────────────────────────
 
