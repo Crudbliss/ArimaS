@@ -269,8 +269,15 @@ class ForecastPanel(tk.Frame):
         all_dates = h_dates + list(f_dates)
         tick_pos  = list(range(0, len(all_dates), 5))
         ax.set_xticks(tick_pos)
-        ax.set_xticklabels([all_dates[i][5:] for i in tick_pos],
-                           rotation=30, fontsize=7)
+        import datetime as _dt
+        def _fmt(d):
+            try:
+                day_name = _dt.datetime.strptime(d, "%Y-%m-%d").strftime("%a")
+                return f"{day_name}\n{d[5:]}"
+            except Exception:
+                return d[5:]
+        ax.set_xticklabels([_fmt(all_dates[i]) for i in tick_pos],
+                           rotation=0, fontsize=7, ha="center")
         ax.set_title(f"{name} — {model} Forecast (14 days)", fontsize=11, pad=8)
         ax.set_ylabel("Units / Day")
         ax.legend(fontsize=8, loc="upper left")

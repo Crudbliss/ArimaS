@@ -19,6 +19,8 @@ class PosPanel(tk.Frame):
         self._cart: list[dict] = []
         self._products: list[dict] = []
         self._view_mode = tk.StringVar(value="grid")  # "list" or "grid"
+        self._search_var = tk.StringVar()
+        self._search_var.trace_add("write", lambda *_: self._filter_products())
         self._build()
 
     # ── Layout ────────────────────────────────────────────────────────
@@ -204,23 +206,23 @@ class PosPanel(tk.Frame):
             self._build_left()
 
     def _build_grid_view(self):
-        """Grid view — clickable product card tiles."""
+        """Grid view — clickable product card tiles (no scroll, static grid)."""
         for w in self._left_container.winfo_children():
             w.destroy()
+
+        # Load products FIRST so category buttons are built correctly
+        self._products = get_all_products(include_archived=False)
 
         left = tk.Frame(self._left_container, bg=T.BG)
         left.pack(fill="both", expand=True)
 
-        # Header row with search + category filter
-        hdr = tk.Frame(left, bg=T.BG)
-        hdr.pack(fill="x", pady=(0, 6))
+        # Header
+        tk.Label(left, text="Products", font=("Segoe UI", 12, "bold"),
+                 bg=T.BG, fg=T.FG).pack(anchor="w")
 
-        tk.Label(hdr, text="Products", font=("Segoe UI", 12, "bold"),
-                 bg=T.BG, fg=T.FG).pack(side="left")
-
-        # Search box reuses same StringVar
+        # Search box
         sr = tk.Frame(left, bg=T.BG)
-        sr.pack(fill="x", pady=(4, 6))
+        sr.pack(fill="x", pady=(4, 4))
         tk.Label(sr, text="🔍", bg=T.BG, fg=T.FG_DIM, font=("Segoe UI", 10)).pack(side="left")
         tk.Entry(sr, textvariable=self._search_var, font=("Segoe UI", 10),
                  bg=T.SECONDARY, fg=T.FG, insertbackground=T.FG, relief="flat"
@@ -229,7 +231,7 @@ class PosPanel(tk.Frame):
         # Category filter buttons
         self._cat_filter = tk.StringVar(value="All")
         cats_frame = tk.Frame(left, bg=T.BG)
-        cats_frame.pack(fill="x", pady=(0, 8))
+        cats_frame.pack(fill="x", pady=(0, 4))
         categories = ["All"] + sorted(set(p["category"] for p in self._products if p.get("category")))
         for cat in categories:
             btn = tk.Button(
@@ -239,31 +241,14 @@ class PosPanel(tk.Frame):
                 command=lambda c=cat: self._filter_by_category(c)
             )
             btn.pack(side="left", padx=2)
-            # Store ref so we can highlight active
             btn._cat = cat
 
         self._cat_btns_frame = cats_frame
         self._update_cat_btn_styles("All")
 
-        # Scrollable canvas grid
-        canvas_frame = tk.Frame(left, bg=T.BG)
-        canvas_frame.pack(fill="both", expand=True)
-
-        self._grid_canvas = tk.Canvas(canvas_frame, bg=T.BG, highlightthickness=0)
-        vsb = ttk.Scrollbar(canvas_frame, orient="vertical", command=self._grid_canvas.yview)
-        self._grid_canvas.configure(yscrollcommand=vsb.set)
-        vsb.pack(side="right", fill="y")
-        self._grid_canvas.pack(side="left", fill="both", expand=True)
-
-        self._grid_inner = tk.Frame(self._grid_canvas, bg=T.BG)
-        self._grid_canvas.create_window((0, 0), window=self._grid_inner, anchor="nw")
-        self._grid_inner.bind("<Configure>", lambda e: self._grid_canvas.configure(
-            scrollregion=self._grid_canvas.bbox("all")
-        ))
-        # Mousewheel scroll
-        self._grid_canvas.bind_all("<MouseWheel>", lambda e: self._grid_canvas.yview_scroll(
-            int(-1*(e.delta/120)), "units"
-        ))
+        # Plain (non-scrollable) grid frame
+        self._grid_inner = tk.Frame(left, bg=T.BG)
+        self._grid_inner.pack(fill="both", expand=True)
 
         self._render_grid(self._products)
 
@@ -300,7 +285,10 @@ class PosPanel(tk.Frame):
         for w in self._grid_inner.winfo_children():
             w.destroy()
 
-        COLS = 3
+        COLS = 10
+        for col in range(COLS):
+            self._grid_inner.columnconfigure(col, weight=1, uniform="card")
+
         for idx, p in enumerate(products):
             row, col = divmod(idx, COLS)
             out_of_stock = p["stock_pieces"] == 0
@@ -308,35 +296,33 @@ class PosPanel(tk.Frame):
             color = self.CARD_COLORS.get(p.get("category", ""), "#334155")
             card_bg = color if not out_of_stock else "#2a2a2a"
 
-            card = tk.Frame(self._grid_inner, bg=card_bg, padx=10, pady=10,
+            card = tk.Frame(self._grid_inner, bg=card_bg, padx=6, pady=8,
                             cursor="hand2" if not out_of_stock else "")
-            card.grid(row=row, column=col, padx=6, pady=6, sticky="nsew")
-            self._grid_inner.columnconfigure(col, weight=1)
+            card.grid(row=row, column=col, padx=4, pady=4, sticky="nsew")
 
             # Category badge
-            cat_lbl = tk.Label(card, text=p.get("category", "").upper(),
-                               font=("Segoe UI", 7, "bold"), bg=card_bg,
-                               fg="#ccccff" if not out_of_stock else "#555555")
-            cat_lbl.pack(anchor="w")
+            tk.Label(card, text=p.get("category", "").upper(),
+                     font=("Segoe UI", 6, "bold"), bg=card_bg,
+                     fg="#ccccff" if not out_of_stock else "#555555").pack(anchor="w")
 
             # Product name
-            tk.Label(card, text=p["name"], font=("Segoe UI", 10, "bold"),
+            tk.Label(card, text=p["name"], font=("Segoe UI", 9, "bold"),
                      bg=card_bg, fg="#ffffff" if not out_of_stock else "#555555",
-                     wraplength=120, justify="left").pack(anchor="w", pady=(4, 6))
+                     wraplength=90, justify="left").pack(anchor="w", pady=(2, 4))
 
             # Price
             tk.Label(card, text=f"₱{p['selling_price']:,.2f}",
-                     font=("Segoe UI", 11, "bold"),
+                     font=("Segoe UI", 10, "bold"),
                      bg=card_bg, fg="#ffffff" if not out_of_stock else "#555555").pack(anchor="w")
 
             # Stock badge
             stock_txt = f"In stock: {p['stock_pieces']}" if not out_of_stock else "OUT OF STOCK"
-            tk.Label(card, text=stock_txt, font=("Segoe UI", 7),
-                     bg=card_bg, fg="#bbffbb" if not out_of_stock else "#cc4444").pack(anchor="e", pady=(4, 0))
+            tk.Label(card, text=stock_txt, font=("Segoe UI", 6),
+                     bg=card_bg, fg="#bbffbb" if not out_of_stock else "#cc4444").pack(anchor="e", pady=(2, 0))
 
-            # Bind click to add 1 to cart
+            # Bind click
             if not out_of_stock:
-                for widget in [card] + card.winfo_children():
+                for widget in [card] + list(card.winfo_children()):
                     widget.bind("<Button-1>", lambda e, prod=p: self._grid_add_to_cart(prod))
                     widget.bind("<Enter>", lambda e, c=card, bg=card_bg: c.config(bg=self._lighten(bg)))
                     widget.bind("<Leave>", lambda e, c=card, bg=card_bg: c.config(bg=bg))
