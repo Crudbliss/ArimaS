@@ -94,7 +94,7 @@ class InventoryPanel(tk.Frame):
                                       f"₱{p['selling_price']:,.2f}",
                                       p["bundle_qty"],
                                       p["stock_pieces"], p["reorder_level"]))
-        self._tree.tag_configure("low", foreground="#ffd166")
+        self._tree.tag_configure("low", foreground="#ed1c11")
         self._tree.tag_configure("archived", foreground="#666666", font=("Segoe UI", 10, "italic"))
 
     def _sort_tree(self, col, reverse):

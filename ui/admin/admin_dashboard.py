@@ -128,7 +128,7 @@ class AdminDashboard:
         tk.Frame(sb, bg=T.SECONDARY, height=1).pack(
             fill="x", padx=15, side="bottom", pady=4)
         tk.Button(
-            sb, text="⏻   Logout", font=("Segoe UI", 10),
+            sb, text="🚪   Logout", font=("Segoe UI", 10),
             bg=T.CARD, fg=T.ACCENT, relief="flat",
             cursor="hand2", anchor="w", padx=20, pady=10,
             activebackground=T.ACCENT, activeforeground=T.FG,

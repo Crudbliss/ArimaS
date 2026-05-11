@@ -95,6 +95,7 @@ def create_tables(conn: sqlite3.Connection):
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS sales (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            txn_number   TEXT,
             product_id   INTEGER NOT NULL REFERENCES products(id),
             qty_sold     INTEGER NOT NULL,
             unit_price   REAL    NOT NULL,
@@ -108,12 +109,16 @@ def create_tables(conn: sqlite3.Connection):
     """)
 
     # --- Migration: add columns to existing sales table if they don't exist ---
-    try:
-        cursor.execute("ALTER TABLE sales ADD COLUMN tendered REAL NOT NULL DEFAULT 0")
-        cursor.execute("ALTER TABLE sales ADD COLUMN change REAL NOT NULL DEFAULT 0")
-        cursor.execute("ALTER TABLE sales ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'")
-    except sqlite3.OperationalError:
-        pass  # Columns already exist
+    for col_sql in [
+        "ALTER TABLE sales ADD COLUMN tendered REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN change REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE sales ADD COLUMN status TEXT NOT NULL DEFAULT 'completed'",
+        "ALTER TABLE sales ADD COLUMN txn_number TEXT",
+    ]:
+        try:
+            cursor.execute(col_sql)
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     # ------------------------------------------------------------------
     # ACTIVITY LOGS  (audit trail for every significant action)

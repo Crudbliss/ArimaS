@@ -5,7 +5,7 @@ pos_panel.py  –  Point of Sale for cashier/user role.
 import tkinter as tk
 from tkinter import ttk, messagebox
 from logic.inventory_logic import get_all_products
-from logic.sales_logic import process_sale, get_recent_sales_for_pos, refund_sale
+from logic.sales_logic import process_sale, get_recent_sales_for_pos, refund_sale, get_receipt_by_txn
 from auth.auth_manager import get_current_user
 import utils.theme as T
 from PIL import Image, ImageTk
@@ -97,7 +97,7 @@ class PosPanel(tk.Frame):
         self._load_products()
 
     def _build_right(self, parent):
-        right = tk.Frame(parent, bg=T.BG, width=340)
+        right = tk.Frame(parent, bg=T.BG, width=360)
         right.pack(side="right", fill="y")
         right.pack_propagate(False)
 
@@ -397,10 +397,10 @@ class _CheckoutDialog(tk.Toplevel):
             return
             
         user = get_current_user()
-        ok, msg = process_sale(self.cart, user["id"], user["username"], tendered=tendered, change=change)
+        ok, msg, txn_number = process_sale(self.cart, user["id"], user["username"], tendered=tendered, change=change)
         
         if ok:
-            _ReceiptDialog(self.master, self.cart, self.total, tendered, change)
+            _ReceiptDialog(self.master, cart=self.cart, total=self.total, tendered=tendered, change=change, txn_number=txn_number)
             self.on_success()
             self.destroy()
         else:
@@ -409,64 +409,116 @@ class _CheckoutDialog(tk.Toplevel):
 # ── Receipt Dialog ────────────────────────────────────────────────────
 
 class _ReceiptDialog(tk.Toplevel):
-    def __init__(self, parent, cart, total, tendered, change):
+    """Shows a receipt. Can be used from fresh checkout (cart mode) or from
+    a transaction lookup (txn_number mode)."""
+    def __init__(self, parent, *, cart=None, total=None, tendered=None, change=None, txn_number=None):
         super().__init__(parent)
         self.title("Transaction Receipt")
-        self.configure(bg="#ffffff") # receipts are usually white
+        self.configure(bg="#ffffff")
         self.resizable(False, False)
         self.grab_set()
-        
-        self.cart = cart
-        self.total = total
-        self.tendered = tendered
-        self.change = change
-        
+
+        # If we have a txn_number, load from DB
+        if txn_number and cart is None:
+            data = get_receipt_by_txn(txn_number)
+            if data:
+                self.items = data["items"]
+                self.total = data["total"]
+                self.tendered = data["tendered"]
+                self.change = data["change"]
+                self.txn_number = data["txn_number"]
+                self.sold_at = data["sold_at"]
+                self.cashier = data["cashier"]
+            else:
+                self.items = []
+                self.total = 0
+                self.tendered = 0
+                self.change = 0
+                self.txn_number = txn_number
+                self.sold_at = ""
+                self.cashier = ""
+        else:
+            # Fresh checkout mode
+            self.items = [{"name": i["name"], "qty": i["qty"], "unit_price": i["unit_price"], "subtotal": i["qty"] * i["unit_price"]} for i in (cart or [])]
+            self.total = total or 0
+            self.tendered = tendered or 0
+            self.change = change or 0
+            self.txn_number = txn_number or ""
+            self.sold_at = ""
+            self.cashier = ""
+
         self._build()
         self.update_idletasks()
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        w, h = 320, 480
+        w, h = 340, 600
         self.geometry(f"{w}x{h}+{(sw-w)//2}+{(sh-h)//2}")
-        
+
     def _build(self):
         f = tk.Frame(self, bg="#ffffff", padx=20, pady=20)
         f.pack(fill="both", expand=True)
-        
-        tk.Label(f, text="ROSEMEN UKAY-UKAY", font=("Trajan Pro 3", 16, "bold"), bg="#ffffff", fg="#000000").pack()
-        #tk.Label(f, text="Inventory & Sales System", font=("Courier", 9), bg="#ffffff", fg="#000000").pack()
+
+        # Try to show logo image
+        try:
+            logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "RosemenLOGO.png")
+            logo_path = os.path.normpath(logo_path)
+            if os.path.exists(logo_path):
+                img = Image.open(logo_path).convert("RGBA")
+                img.thumbnail((120, 120), Image.LANCZOS)
+                # Paste onto white background (receipts are white)
+                bg_img = Image.new("RGB", img.size, (255, 255, 255))
+                bg_img.paste(img, mask=img.split()[3])
+                self._logo_photo = ImageTk.PhotoImage(bg_img)
+                lbl = tk.Label(f, image=self._logo_photo, bg="#ffffff")
+                lbl.pack(pady=(0, 4))
+            else:
+                raise FileNotFoundError
+        except Exception:
+            tk.Label(f, text="ROSEMEN UKAY-UKAY", font=("Trajan Pro 3", 14, "bold"), bg="#ffffff", fg="#000000").pack()
+
+        tk.Label(f, text="ROSEMEN UKAY-UKAY", font=("Courier", 11, "bold"), bg="#ffffff", fg="#000000").pack()
         tk.Label(f, text="--------------------------------", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(pady=4)
-        
+
+        # Transaction info
+        if self.txn_number:
+            tk.Label(f, text=f"TXN#: {self.txn_number}", font=("Courier", 8), bg="#ffffff", fg="#555555").pack(anchor="w")
+        if self.sold_at:
+            tk.Label(f, text=f"Date: {self.sold_at}", font=("Courier", 8), bg="#ffffff", fg="#555555").pack(anchor="w")
+        if self.cashier:
+            tk.Label(f, text=f"Cashier: {self.cashier}", font=("Courier", 8), bg="#ffffff", fg="#555555").pack(anchor="w")
+        if self.txn_number or self.sold_at or self.cashier:
+            tk.Label(f, text="--------------------------------", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(pady=4)
+
         # Items
         items_frame = tk.Frame(f, bg="#ffffff")
         items_frame.pack(fill="both", expand=True)
-        
-        for item in self.cart:
+
+        for item in self.items:
             row = tk.Frame(items_frame, bg="#ffffff")
             row.pack(fill="x", pady=2)
             tk.Label(row, text=f"{item['qty']}x {item['name']}", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(side="left")
-            sub = item['qty'] * item['unit_price']
-            tk.Label(row, text=f"{sub:,.2f}", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(side="right")
-            
+            tk.Label(row, text=f"{item['subtotal']:,.2f}", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(side="right")
+
         tk.Label(f, text="--------------------------------", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(pady=4)
-        
+
         # Totals
         totals_frame = tk.Frame(f, bg="#ffffff")
         totals_frame.pack(fill="x")
-        
+
         def add_row(parent, label, value, bold=False):
             r = tk.Frame(parent, bg="#ffffff")
             r.pack(fill="x", pady=1)
             font = ("Courier", 10, "bold") if bold else ("Courier", 10)
             tk.Label(r, text=label, font=font, bg="#ffffff", fg="#000000").pack(side="left")
             tk.Label(r, text=value, font=font, bg="#ffffff", fg="#000000").pack(side="right")
-            
+
         add_row(totals_frame, "TOTAL:", f"P {self.total:,.2f}", bold=True)
         add_row(totals_frame, "CASH:", f"P {self.tendered:,.2f}")
         add_row(totals_frame, "CHANGE:", f"P {self.change:,.2f}")
-        
+
         tk.Label(f, text="--------------------------------", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(pady=4)
         tk.Label(f, text="Thank you for shopping!", font=("Courier", 10, "bold"), bg="#ffffff", fg="#000000").pack(pady=10)
-        
-        tk.Button(f, text="Close Receipt", font=("Segoe UI", 10, "bold"), bg=T.ACCENT, fg=T.FG, 
+
+        tk.Button(f, text="Close Receipt", font=("Segoe UI", 10, "bold"), bg=T.ACCENT, fg=T.FG,
                   relief="flat", cursor="hand2", pady=8, command=self.destroy).pack(fill="x", side="bottom")
 
 # ── Transactions Dialog ───────────────────────────────────────────────
@@ -484,7 +536,7 @@ class _TransactionsDialog(tk.Toplevel):
         
         self.update_idletasks()
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"700x400+{(sw-700)//2}+{(sh-400)//2}")
+        self.geometry(f"800x420+{(sw-800)//2}+{(sh-420)//2}")
         
     def _build(self):
         f = tk.Frame(self, bg=T.BG, padx=20, pady=20)
@@ -493,10 +545,10 @@ class _TransactionsDialog(tk.Toplevel):
         tk.Label(f, text="Recent Transactions (Today)", font=("Segoe UI", 14, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 10))
         
         # Treeview
-        columns = ("id", "time", "product", "qty", "total", "tendered", "change", "status", "cashier")
+        columns = ("txn", "time", "product", "qty", "total", "tendered", "change", "status", "cashier")
         self.tree = ttk.Treeview(f, columns=columns, show="headings", height=10)
         
-        self.tree.heading("id", text="ID")
+        self.tree.heading("txn", text="TXN#")
         self.tree.heading("time", text="Time")
         self.tree.heading("product", text="Product")
         self.tree.heading("qty", text="Qty")
@@ -506,9 +558,9 @@ class _TransactionsDialog(tk.Toplevel):
         self.tree.heading("status", text="Status")
         self.tree.heading("cashier", text="Cashier")
         
-        self.tree.column("id", width=40, anchor="center")
+        self.tree.column("txn", width=160)
         self.tree.column("time", width=120)
-        self.tree.column("product", width=140)
+        self.tree.column("product", width=130)
         self.tree.column("qty", width=40, anchor="center")
         self.tree.column("total", width=80, anchor="e")
         self.tree.column("tendered", width=80, anchor="e")
@@ -520,22 +572,26 @@ class _TransactionsDialog(tk.Toplevel):
         T.apply_treeview_style()
         
         self.tree.tag_configure("refunded", foreground=T.FG_DIM)
+        self.tree.bind("<Double-1>", self._on_double_click)
         
         # Actions
         btn_frame = tk.Frame(f, bg=T.BG)
         btn_frame.pack(fill="x", pady=(10, 0))
         
+        tk.Button(btn_frame, text="🧾  View Receipt", font=("Segoe UI", 10, "bold"),
+                  bg=T.SECONDARY, fg=T.FG, cursor="hand2", relief="flat", padx=15, pady=5,
+                  command=self._view_receipt).pack(side="left", padx=(0, 8))
         tk.Button(btn_frame, text="Refund Selected", font=("Segoe UI", 10, "bold"),
                   bg=T.ACCENT, fg=T.FG, cursor="hand2", relief="flat", padx=15, pady=5,
                   command=self._do_refund).pack(side="left")
                   
     def _load_data(self):
         self.tree.delete(*self.tree.get_children())
-        sales = get_recent_sales_for_pos()
-        for s in sales:
+        self._sales_data = get_recent_sales_for_pos()
+        for idx, s in enumerate(self._sales_data):
             tag = "refunded" if s["status"] == "refunded" else ""
-            self.tree.insert("", "end", iid=str(s["id"]), tags=(tag,), values=(
-                s["id"],
+            self.tree.insert("", "end", iid=str(idx), tags=(tag,), values=(
+                s.get("txn_number", "") or f"#{s['id']}",
                 s["sold_at"],
                 s["product"],
                 s["qty"],
@@ -546,17 +602,39 @@ class _TransactionsDialog(tk.Toplevel):
                 s["username"]
             ))
 
+    def _get_selected_txn(self):
+        sel = self.tree.selection()
+        if not sel:
+            return None, None
+        idx = int(sel[0])
+        s = self._sales_data[idx]
+        return s.get("txn_number"), s["id"]
+
+    def _on_double_click(self, event):
+        self._view_receipt()
+
+    def _view_receipt(self):
+        txn_number, sale_id = self._get_selected_txn()
+        if txn_number is None and sale_id is None:
+            messagebox.showwarning("Select Transaction", "Please select a transaction to view.", parent=self)
+            return
+        if txn_number:
+            _ReceiptDialog(self, txn_number=txn_number)
+        else:
+            messagebox.showinfo("No Receipt", "This transaction was made before transaction numbers were added.", parent=self)
+
     def _do_refund(self):
         sel = self.tree.selection()
         if not sel:
             messagebox.showwarning("Select Transaction", "Please select a transaction to refund.", parent=self)
             return
-            
-        sale_id = int(sel[0])
-        item = self.tree.item(sale_id)
-        status = item["values"][7]
+
+        idx = int(sel[0])
+        s = self._sales_data[idx]
+        sale_id = s["id"]
+        status = s["status"]
         
-        if status == "REFUNDED":
+        if status == "refunded":
             messagebox.showinfo("Already Refunded", "This transaction has already been refunded.", parent=self)
             return
             

@@ -7,12 +7,16 @@ from database.db_setup import get_connection
 from utils.logger import log_action
 
 
-def process_sale(cart: list[dict], user_id: int, username: str, tendered: float = 0.0, change: float = 0.0) -> tuple[bool, str]:
+def process_sale(cart: list[dict], user_id: int, username: str, tendered: float = 0.0, change: float = 0.0) -> tuple[bool, str, str | None]:
     """
     cart items: {"product_id", "name", "qty", "unit_price", "bundle_qty"}
+    Returns (success, message, txn_number)
     """
     if not cart:
-        return False, "Cart is empty."
+        return False, "Cart is empty.", None
+
+    import datetime, uuid
+    txn_number = f"TXN-{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}-{uuid.uuid4().hex[:4].upper()}"
 
     conn = get_connection()
     try:
@@ -36,9 +40,9 @@ def process_sale(cart: list[dict], user_id: int, username: str, tendered: float 
                 )
 
             conn.execute("""
-                INSERT INTO sales (product_id, qty_sold, unit_price, total_amount, tendered, change, status, served_by)
-                VALUES (?, ?, ?, ?, ?, ?, 'completed', ?)
-            """, (pid, qty, unit_price, total, tendered, change, user_id))
+                INSERT INTO sales (txn_number, product_id, qty_sold, unit_price, total_amount, tendered, change, status, served_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?)
+            """, (txn_number, pid, qty, unit_price, total, tendered, change, user_id))
             conn.execute("""
                 UPDATE products SET stock_pieces = stock_pieces - ?,
                     updated_at = datetime('now','localtime')
@@ -48,17 +52,44 @@ def process_sale(cart: list[dict], user_id: int, username: str, tendered: float 
         conn.commit()
         grand_total = sum(i["qty"] * i["unit_price"] for i in cart)
         summary = ", ".join(f"{i['name']} x{i['qty']}" for i in cart)
-        log_action(user_id, username, "SALE", f"₱{grand_total:.2f} — {summary}")
-        return True, f"Sale complete! Total: ₱{grand_total:.2f}"
+        log_action(user_id, username, "SALE", f"{txn_number} | ₱{grand_total:.2f} — {summary}")
+        return True, f"Sale complete! Total: ₱{grand_total:.2f}", txn_number
 
     except ValueError as e:
         conn.rollback()
-        return False, str(e)
+        return False, str(e), None
     except sqlite3.Error as e:
         conn.rollback()
-        return False, f"Database error: {e}"
+        return False, f"Database error: {e}", None
     finally:
         conn.close()
+
+
+def get_receipt_by_txn(txn_number: str) -> dict | None:
+    """Fetch all line items and metadata for a transaction number."""
+    conn = get_connection()
+    rows = conn.execute("""
+        SELECT p.name, s.qty_sold, s.unit_price, s.total_amount,
+               s.tendered, s.change, s.sold_at, u.username, s.txn_number
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        JOIN users u ON s.served_by = u.id
+        WHERE s.txn_number = ?
+        ORDER BY s.id
+    """, (txn_number,)).fetchall()
+    conn.close()
+    if not rows:
+        return None
+    items = [{"name": r[0], "qty": r[1], "unit_price": r[2], "subtotal": r[3]} for r in rows]
+    return {
+        "txn_number": rows[0][8],
+        "items": items,
+        "total": sum(i["subtotal"] for i in items),
+        "tendered": rows[0][4],
+        "change": rows[0][5],
+        "sold_at": rows[0][6],
+        "cashier": rows[0][7],
+    }
 
 
 def get_all_sales() -> list[dict]:
@@ -93,7 +124,7 @@ def get_recent_sales_for_pos() -> list[dict]:
     """Fetch the latest sales for the POS 'Transactions' popup."""
     conn = get_connection()
     rows = conn.execute("""
-        SELECT s.id, p.name, s.qty_sold, s.total_amount, s.status, u.username, s.sold_at, s.tendered, s.change
+        SELECT s.id, p.name, s.qty_sold, s.total_amount, s.status, u.username, s.sold_at, s.tendered, s.change, s.txn_number
         FROM sales s
         JOIN products p ON s.product_id = p.id
         JOIN users u ON s.served_by = u.id
@@ -101,7 +132,7 @@ def get_recent_sales_for_pos() -> list[dict]:
         ORDER BY s.sold_at DESC LIMIT 100
     """).fetchall()
     conn.close()
-    cols = ["id","product","qty","total","status","username","sold_at","tendered","change"]
+    cols = ["id","product","qty","total","status","username","sold_at","tendered","change","txn_number"]
     return [dict(zip(cols, r)) for r in rows]
 
 def refund_sale(sale_id: int, user_id: int, username: str) -> tuple[bool, str]:
