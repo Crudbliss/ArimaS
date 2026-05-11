@@ -1,13 +1,14 @@
 """
 db_setup.py
 -----------
-Creates all SQLite tables and seeds default data for Rosemen Ukay-Ukay.
-Run this once before launching the app for the first time.
+Creates all SQLite tables and optionally seeds default data for Rosemen Ukay-Ukay.
+Run once to initialize tables, or with flags to seed data.
 """
 
 import sqlite3
 import hashlib
 import os
+import argparse
 
 DB_PATH = os.path.join(os.path.dirname(__file__), "arimas.db")
 
@@ -204,17 +205,28 @@ def seed_products(conn: sqlite3.Connection):
     print("[db_setup] Clothing products seeded.")
 
 
-def initialize_database():
-    """Full setup: connect → create tables → seed data."""
+def initialize_database(seed_users=False, seed_products=False):
+    """Full setup: connect → create tables → optionally seed data."""
     conn = get_connection()
     try:
         create_tables(conn)
-        seed_default_users(conn)
-        seed_products(conn)
+        if seed_users:
+            seed_default_users(conn)
+        if seed_products:
+            seed_products(conn)
         print(f"[db_setup] Database ready at: {DB_PATH}")
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
-    initialize_database()
+    parser = argparse.ArgumentParser(description="Initialize ArimaS database")
+    parser.add_argument("--seed-users", action="store_true", help="Seed default admin/cashier users")
+    parser.add_argument("--seed-products", action="store_true", help="Seed default clothing products")
+    parser.add_argument("--seed-all", action="store_true", help="Seed both users and products")
+    args = parser.parse_args()
+
+    seed_users = args.seed_users or args.seed_all
+    seed_products = args.seed_products or args.seed_all
+
+    initialize_database(seed_users=seed_users, seed_products=seed_products)
