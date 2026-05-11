@@ -6,6 +6,8 @@ The login screen for Rosemen Ukay-Ukay.
 
 import tkinter as tk
 from tkinter import messagebox
+from PIL import Image, ImageTk
+import os
 from auth.auth_manager import login
 import utils.theme as T
 
@@ -23,7 +25,7 @@ class LoginWindow:
         self.root.title("Rosemen Ukay-Ukay")
         self.root.resizable(False, False)
         # You can resize the login window by changing the numbers below (Width, Height):
-        self._center_window(600, 620)
+        self._center_window(600, 660)
 
         self._build_ui()
 
@@ -49,9 +51,21 @@ class LoginWindow:
         )
         self.theme_btn.place(relx=0.95, rely=0.1, anchor="ne")
 
+        # Load and display the logo
+        try:
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "RosemenLOGO.png")
+            if os.path.exists(logo_path):
+                img = Image.open(logo_path)
+                # Resize the image to look good in the header
+                img.thumbnail((120, 120), Image.Resampling.LANCZOS)
+                self._logo_photo = ImageTk.PhotoImage(img)
+                tk.Label(header, image=self._logo_photo, bg=T.CARD).pack(pady=(0, 5))
+        except Exception as e:
+            print("Failed to load logo:", e)
+
         tk.Label(
             header,
-            text="👗 Rosemen Ukay-Ukay",
+            text="Rosemen Ukay-Ukay",
             font=("Trajan Pro 3", 20, "bold"),
             bg=T.CARD,
             fg=T.ACCENT,

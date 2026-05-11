@@ -28,7 +28,8 @@ def _ensure_dependencies():
         "pandas": "pandas", 
         "sqlalchemy": "sqlalchemy",
         "sklearn": "scikit-learn",
-        "tkcalendar": "tkcalendar"
+        "tkcalendar": "tkcalendar",
+        "PIL": "Pillow"
     }
     missing = []
     for pkg, pip_name in required.items():
@@ -85,6 +86,17 @@ if __name__ == "__main__":
 
     root = tk.Tk()
     root.configure(bg="#1a1a2e")
+    
+    try:
+        from PIL import Image, ImageTk
+        import os
+        logo_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "RosemenLOGO.png")
+        if os.path.exists(logo_path):
+            img = Image.open(logo_path)
+            photo = ImageTk.PhotoImage(img)
+            root.iconphoto(False, photo)
+    except Exception as e:
+        print("Could not set window icon:", e)
 
     LoginWindow(root, on_login_success)
     root.mainloop()

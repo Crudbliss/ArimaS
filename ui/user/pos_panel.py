@@ -8,6 +8,8 @@ from logic.inventory_logic import get_all_products
 from logic.sales_logic import process_sale, get_recent_sales_for_pos, refund_sale
 from auth.auth_manager import get_current_user
 import utils.theme as T
+from PIL import Image, ImageTk
+import os
 
 
 class PosPanel(tk.Frame):
@@ -24,8 +26,19 @@ class PosPanel(tk.Frame):
         # Top bar
         bar = tk.Frame(self, bg=T.CARD, pady=10)
         bar.pack(fill="x")
-        tk.Label(bar, text="👗  Rosemen Ukay-Ukay  —  Point of Sale",
-                 font=("Segoe UI", 13, "bold"), bg=T.CARD, fg=T.FG).pack(side="left", padx=20)
+        # Load logo
+        try:
+            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "RosemenLOGO.png")
+            if os.path.exists(logo_path):
+                img = Image.open(logo_path)
+                img.thumbnail((30, 30), Image.Resampling.LANCZOS)
+                self._logo_photo = ImageTk.PhotoImage(img)
+                tk.Label(bar, image=self._logo_photo, bg=T.CARD).pack(side="left", padx=(20, 5))
+        except Exception as e:
+            print("Failed to load logo in POS:", e)
+
+        tk.Label(bar, text="Rosemen Ukay-Ukay  —  Point of Sale",
+                 font=("Segoe UI", 13, "bold"), bg=T.CARD, fg=T.FG).pack(side="left")
         user = get_current_user()
         tk.Label(bar, text=f"👤 {user['username']}",
                  font=("Segoe UI", 9), bg=T.CARD, fg=T.FG_DIM).pack(side="right", padx=12)
