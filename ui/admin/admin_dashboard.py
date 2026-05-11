@@ -157,7 +157,7 @@ class AdminDashboard:
             "users":     UserManagerPanel(self.content),
         }
 
-    def _show(self, key: str):
+    def _show(self, key: str, *args, **kwargs):
         for k, btn in self._nav_btns.items():
             btn.config(bg=T.SECONDARY if k == key else T.CARD,
                        fg=T.FG if k == key else T.FG_DIM)
@@ -165,7 +165,7 @@ class AdminDashboard:
             if k == key:
                 panel.pack(fill="both", expand=True)
                 if hasattr(panel, "refresh"):
-                    panel.refresh()
+                    panel.refresh(*args, **kwargs)
             else:
                 panel.pack_forget()
 

@@ -220,6 +220,17 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
         """, (start_date, end_date)).fetchall()
         category_data = [{"category": r[0] or "Uncategorized", "qty": r[1], "revenue": r[2]} for r in cat_rows]
 
+        # Cashier Performance
+        cashier_rows = conn.execute("""
+            SELECT u.username, COUNT(s.id), SUM(s.qty_sold), SUM(s.total_amount)
+            FROM sales s
+            JOIN users u ON s.served_by = u.id
+            WHERE s.status = 'completed' AND date(s.sold_at) >= ? AND date(s.sold_at) <= ?
+            GROUP BY u.username
+            ORDER BY SUM(s.total_amount) DESC
+        """, (start_date, end_date)).fetchall()
+        cashier_data = [{"username": r[0], "transactions": r[1], "qty": r[2], "revenue": r[3]} for r in cashier_rows]
+
         return {
             "total_revenue": total_revenue,
             "items_sold": summary_row[1],
@@ -228,7 +239,8 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
             "total_profit": total_profit,
             "top_sellers": top_sellers,
             "chart_data": chart_data,
-            "category_data": category_data
+            "category_data": category_data,
+            "cashier_data": cashier_data
         }
     finally:
         conn.close()

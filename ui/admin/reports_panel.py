@@ -8,6 +8,7 @@ import datetime
 import csv
 from tkinter import filedialog
 from logic.sales_logic import get_custom_report
+from logic.inventory_logic import get_restock_report
 import utils.theme as T
 from matplotlib.figure import Figure
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -64,6 +65,14 @@ class ReportsPanel(tk.Frame):
         self._tab_category = tk.Frame(self._notebook, bg=T.BG)
         self._notebook.add(self._tab_category, text="Category Performance")
 
+        # Tab 3: Restock & Reorder
+        self._tab_restock = tk.Frame(self._notebook, bg=T.BG)
+        self._notebook.add(self._tab_restock, text="Restock & Reorder")
+
+        # Tab 4: Cashier Performance
+        self._tab_cashier = tk.Frame(self._notebook, bg=T.BG)
+        self._notebook.add(self._tab_cashier, text="Cashier Performance")
+
         # Summary Cards
         self._cards_frame = tk.Frame(self._tab_sales, bg=T.BG)
         self._cards_frame.pack(fill="x", pady=(0, 20))
@@ -117,6 +126,69 @@ class ReportsPanel(tk.Frame):
         tk.Button(self._tab_sales, text="📥  Export Report", font=("Segoe UI", 10, "bold"), bg=T.CARD, fg=T.ACCENT, cursor="hand2", relief="flat", padx=20, pady=8, command=self._export).pack(anchor="e", pady=(0, 20))
         
         self._build_category_tab()
+        self._build_restock_tab()
+        self._build_cashier_tab()
+
+    def _build_cashier_tab(self):
+        row_frame = tk.Frame(self._tab_cashier, bg=T.BG)
+        row_frame.pack(fill="both", expand=True, pady=(20, 20))
+
+        # Left: Data table
+        left_pane = tk.Frame(row_frame, bg=T.BG)
+        left_pane.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        tk.Label(left_pane, text="Cashier Breakdown", font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 10))
+        
+        cols = ("cashier", "trans", "qty", "revenue")
+        self._cashier_tree = ttk.Treeview(left_pane, columns=cols, show="headings", style="Report.Treeview", height=10)
+        self._cashier_tree.heading("cashier", text="Cashier")
+        self._cashier_tree.heading("trans", text="Transactions")
+        self._cashier_tree.heading("qty", text="Items Sold")
+        self._cashier_tree.heading("revenue", text="Revenue")
+        self._cashier_tree.column("cashier", width=120)
+        self._cashier_tree.column("trans", width=90, anchor="center")
+        self._cashier_tree.column("qty", width=90, anchor="center")
+        self._cashier_tree.column("revenue", width=120, anchor="e")
+        self._cashier_tree.pack(fill="both", expand=True)
+
+        # Right: Bar Chart
+        right_pane = tk.Frame(row_frame, bg=T.BG)
+        right_pane.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        tk.Label(right_pane, text="Revenue by Cashier", font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 10))
+        self._cashier_chart_frame = tk.Frame(right_pane, bg=T.CARD)
+        self._cashier_chart_frame.pack(fill="both", expand=True)
+
+    def _build_restock_tab(self):
+        # Summary card for Total Estimated Restock Cost
+        self._restock_cards_frame = tk.Frame(self._tab_restock, bg=T.BG)
+        self._restock_cards_frame.pack(fill="x", pady=(20, 10))
+        
+        self.lbl_restock_cost = tk.StringVar(value="₱0.00")
+        card = tk.Frame(self._restock_cards_frame, bg=T.CARD, padx=20, pady=15)
+        card.pack(side="left", fill="both", expand=True)
+        tk.Label(card, text="Total Estimated Restock Cost", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
+        tk.Label(card, textvariable=self.lbl_restock_cost, font=("Segoe UI", 18, "bold"), bg=T.CARD, fg=T.ERROR).pack(anchor="w", pady=(5,0))
+
+        # Restock Table
+        table_frame = tk.Frame(self._tab_restock, bg=T.BG)
+        table_frame.pack(fill="both", expand=True, pady=(0, 20))
+        
+        cols = ("name", "category", "stock", "reorder_lvl", "buy_price", "est_cost")
+        self._restock_tree = ttk.Treeview(table_frame, columns=cols, show="headings", style="Report.Treeview", height=15)
+        self._restock_tree.heading("name", text="Product Name")
+        self._restock_tree.heading("category", text="Category")
+        self._restock_tree.heading("stock", text="Current Stock")
+        self._restock_tree.heading("reorder_lvl", text="Reorder Level")
+        self._restock_tree.heading("buy_price", text="Buy Price / Sack")
+        self._restock_tree.heading("est_cost", text="Est. Cost (1 Sack)")
+
+        self._restock_tree.column("name", width=180)
+        self._restock_tree.column("category", width=100)
+        self._restock_tree.column("stock", width=90, anchor="center")
+        self._restock_tree.column("reorder_lvl", width=90, anchor="center")
+        self._restock_tree.column("buy_price", width=120, anchor="e")
+        self._restock_tree.column("est_cost", width=120, anchor="e")
+
+        self._restock_tree.pack(fill="both", expand=True)
 
     def _build_category_tab(self):
         row_frame = tk.Frame(self._tab_category, bg=T.BG)
@@ -199,6 +271,27 @@ class ReportsPanel(tk.Frame):
             ))
 
         self._draw_chart(report)
+        self._update_restock_tab()
+
+    def _update_restock_tab(self):
+        self._restock_tree.delete(*self._restock_tree.get_children())
+        try:
+            restock_data = get_restock_report()
+            total_est_cost = 0.0
+            for item in restock_data:
+                cost = float(item["buying_price"] or 0)
+                total_est_cost += cost
+                self._restock_tree.insert("", "end", values=(
+                    item["name"],
+                    item["category"],
+                    item["stock"],
+                    item["reorder_level"],
+                    f"₱{cost:,.2f}",
+                    f"₱{cost:,.2f}"
+                ))
+            self.lbl_restock_cost.set(f"₱{total_est_cost:,.2f}")
+        except Exception as e:
+            print(f"Failed to fetch restock report: {e}")
 
     def _draw_chart(self, report):
         chart_data = report.get("chart_data", [])
@@ -272,6 +365,65 @@ class ReportsPanel(tk.Frame):
         else:
             tk.Label(self._cat_chart_frame, text="No category data available.", bg=T.CARD, fg=T.FG_DIM).pack(pady=50)
 
+        # ── Update Cashier Tab ──
+        for item in self._cashier_tree.get_children():
+            self._cashier_tree.delete(item)
+            
+        cashier_names = []
+        cashier_revs = []
+        
+        for c in report.get("cashier_data", []):
+            self._cashier_tree.insert("", "end", values=(
+                c["username"],
+                f"{c['transactions']:,}",
+                f"{c['qty']:,}",
+                f"₱{c['revenue']:,.2f}"
+            ))
+            if c["revenue"] > 0:
+                cashier_names.append(c["username"])
+                cashier_revs.append(c["revenue"])
+
+        for widget in self._cashier_chart_frame.winfo_children():
+            widget.destroy()
+
+        if cashier_revs:
+            fig3 = Figure(figsize=(5, 4), dpi=100, facecolor=T.CARD)
+            ax3 = fig3.add_subplot(111)
+            
+            # Simple bar chart
+            x_pos = range(len(cashier_names))
+            bars = ax3.bar(x_pos, cashier_revs, color=T.ACCENT)
+            ax3.set_xticks(x_pos)
+            ax3.set_xticklabels(cashier_names, rotation=15)
+            
+            # Add data anchors (labels) above bars
+            try:
+                ax3.bar_label(bars, fmt='₱%d', padding=3, color=T.FG, fontsize=8, fontweight='bold')
+            except AttributeError:
+                # Fallback for older matplotlib versions
+                for bar in bars:
+                    yval = bar.get_height()
+                    ax3.text(bar.get_x() + bar.get_width()/2.0, yval, f'₱{yval:,.0f}', ha='center', va='bottom', fontsize=8, color=T.FG, fontweight='bold')
+            
+            ax3.set_ylabel("Revenue (₱)", fontsize=8)
+            ax3.tick_params(axis='both', labelsize=8)
+            ax3.grid(True, axis='y', linestyle="--", alpha=0.3)
+            
+            # Matplotlib theme overrides
+            ax3.set_facecolor(T.BG)
+            for spine in ax3.spines.values():
+                spine.set_edgecolor(T.SECONDARY)
+            ax3.tick_params(colors=T.FG_DIM)
+            ax3.yaxis.label.set_color(T.FG_DIM)
+
+            fig3.tight_layout()
+
+            canvas3 = FigureCanvasTkAgg(fig3, master=self._cashier_chart_frame)
+            canvas3.draw()
+            canvas3.get_tk_widget().pack(fill="both", expand=True)
+        else:
+            tk.Label(self._cashier_chart_frame, text="No cashier data available.", bg=T.CARD, fg=T.FG_DIM).pack(pady=50)
+
     def _export(self):
         start = self._start_var.get()
         end = self._end_var.get()
@@ -320,8 +472,12 @@ class ReportsPanel(tk.Frame):
         except Exception as e:
             messagebox.showerror("Export Failed", f"An error occurred while saving the CSV:\n{e}")
 
-    def refresh(self):
-        if not self._start_var.get():
+    def refresh(self, start_date=None, end_date=None):
+        if start_date and end_date:
+            self._start_var.set(start_date)
+            self._end_var.set(end_date)
+            self._generate()
+        elif not self._start_var.get():
             self._set_preset("Today")
         else:
             self._generate()

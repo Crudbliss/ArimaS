@@ -29,7 +29,7 @@ def _fetch_sales_data(period: str) -> tuple[list[str], list[float]]:
             WHERE date(sold_at,'localtime') >= date('now','localtime','-13 days')
             GROUP BY date(sold_at,'localtime') ORDER BY 1
         """).fetchall()
-        labels = [r[0][5:] for r in rows]
+        labels = [r[0] for r in rows]
     elif period == "Weekly":
         rows = conn.execute("""
             SELECT strftime('%Y-W%W',sold_at,'localtime'), COALESCE(SUM(total_amount),0)
@@ -37,7 +37,7 @@ def _fetch_sales_data(period: str) -> tuple[list[str], list[float]]:
             WHERE date(sold_at,'localtime') >= date('now','localtime','-83 days')
             GROUP BY 1 ORDER BY 1
         """).fetchall()
-        labels = [r[0][5:] for r in rows]
+        labels = [r[0] for r in rows]
     elif period == "Monthly":
         rows = conn.execute("""
             SELECT strftime('%Y-%m',sold_at,'localtime'), COALESCE(SUM(total_amount),0)
@@ -54,6 +54,28 @@ def _fetch_sales_data(period: str) -> tuple[list[str], list[float]]:
         labels = [r[0] for r in rows]
     conn.close()
     return labels, [float(r[1]) for r in rows]
+
+def _fetch_category_data(period: str) -> list[dict]:
+    conn = get_connection()
+    if period == "Daily":
+        where_clause = "date(s.sold_at,'localtime') >= date('now','localtime','-13 days')"
+    elif period == "Weekly":
+        where_clause = "date(s.sold_at,'localtime') >= date('now','localtime','-83 days')"
+    elif period == "Monthly":
+        where_clause = "date(s.sold_at,'localtime') >= date('now','localtime','-364 days')"
+    else:
+        where_clause = "1=1"
+        
+    rows = conn.execute(f"""
+        SELECT p.category, SUM(s.total_amount)
+        FROM sales s
+        JOIN products p ON s.product_id = p.id
+        WHERE s.status = 'completed' AND {where_clause}
+        GROUP BY p.category
+        ORDER BY SUM(s.total_amount) DESC
+    """).fetchall()
+    conn.close()
+    return [{"category": r[0] or "Uncategorized", "revenue": float(r[1])} for r in rows]
 
 
 class HomePanel(tk.Frame):
@@ -131,10 +153,16 @@ class HomePanel(tk.Frame):
         self._low_tree.pack(fill="x")
         self._tree_container = tree_container
 
-        # Chart frame — below low stock
-        self._chart_frame = tk.Frame(chart_section, bg=T.CARD, height=230)
-        self._chart_frame.pack(fill="both", expand=True)
-        self._chart_frame.pack_propagate(False)
+        # Chart frames — below low stock
+        self._charts_container = tk.Frame(chart_section, bg=T.BG, height=230)
+        self._charts_container.pack(fill="both", expand=True)
+        self._charts_container.pack_propagate(False)
+
+        self._chart_frame = tk.Frame(self._charts_container, bg=T.CARD)
+        self._chart_frame.pack(side="left", fill="both", expand=True, padx=(0, 5))
+
+        self._cat_chart_frame = tk.Frame(self._charts_container, bg=T.CARD)
+        self._cat_chart_frame.pack(side="right", fill="both", expand=True, padx=(5, 0))
 
         self.refresh()
 
@@ -236,12 +264,75 @@ class HomePanel(tk.Frame):
                      font=("Segoe UI", 11), bg=T.CARD, fg=T.FG_DIM).pack(expand=True)
             return
 
+        import datetime
+        formatted_labels = []
+        footnote = ""
+
+        if period == "Daily":
+            for lbl in labels:
+                try:
+                    dt = datetime.datetime.strptime(lbl, "%Y-%m-%d")
+                    formatted_labels.append(dt.strftime("%A"))
+                except ValueError:
+                    formatted_labels.append(lbl)
+            if labels:
+                try:
+                    dt_first = datetime.datetime.strptime(labels[0], "%Y-%m-%d")
+                    footnote = f"Week of {dt_first.strftime('%B %d, %Y')}"
+                except ValueError:
+                    pass
+
+        elif period == "Weekly":
+            for lbl in labels:
+                try:
+                    year, week = lbl.split('-W')
+                    dt = datetime.datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                    day_of_month = dt.day
+                    week_of_month = (day_of_month - 1) // 7 + 1
+                    week_str = ["1st", "2nd", "3rd", "4th", "5th"][min(week_of_month-1, 4)] + " Week"
+                    formatted_labels.append(week_str)
+                except Exception:
+                    formatted_labels.append(lbl)
+            if labels:
+                try:
+                    year, week = labels[0].split('-W')
+                    dt_first = datetime.datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+                    year_last, week_last = labels[-1].split('-W')
+                    dt_last = datetime.datetime.strptime(f"{year_last}-W{week_last}-1", "%Y-W%W-%w")
+                    if dt_first.strftime('%B %Y') == dt_last.strftime('%B %Y'):
+                        footnote = f"For the month of {dt_first.strftime('%B %Y')}"
+                    else:
+                        footnote = f"From {dt_first.strftime('%B %Y')} to {dt_last.strftime('%B %Y')}"
+                except Exception:
+                    pass
+
+        elif period == "Monthly":
+            for lbl in labels:
+                try:
+                    dt = datetime.datetime.strptime(lbl, "%Y-%m")
+                    formatted_labels.append(dt.strftime("%B"))
+                except ValueError:
+                    formatted_labels.append(lbl)
+            if labels:
+                try:
+                    dt_first = datetime.datetime.strptime(labels[0], "%Y-%m")
+                    dt_last = datetime.datetime.strptime(labels[-1], "%Y-%m")
+                    if dt_first.year == dt_last.year:
+                        footnote = f"Year {dt_first.year}"
+                    else:
+                        footnote = f"Years {dt_first.year} - {dt_last.year}"
+                except ValueError:
+                    pass
+
+        else:
+            formatted_labels = labels
+
         fig = Figure(figsize=(8, 2.5), dpi=96)
         ax  = fig.add_subplot(111)
         x   = range(len(labels))
 
         # Use a sleek line graph with filled area instead of bars
-        ax.plot(x, values, color=T.CHART_BAR, marker="o", linewidth=2.5, markersize=6, zorder=3)
+        ax.plot(x, values, color=T.CHART_BAR, marker="o", linewidth=2.5, markersize=6, zorder=3, picker=True, pickradius=8)
         ax.fill_between(x, values, alpha=0.15, color=T.CHART_BAR, zorder=2)
         
         # Highlight the last point
@@ -255,18 +346,88 @@ class HomePanel(tk.Frame):
                         fontsize=7, color=T.FG_DIM, zorder=5)
 
         ax.set_xticks(list(x))
-        ax.set_xticklabels(labels, rotation=30 if len(labels) > 7 else 0,
+        ax.set_xticklabels(formatted_labels, rotation=30 if len(formatted_labels) > 7 else 0,
                            fontsize=7.5)
         ax.set_ylabel("Revenue (P)", fontsize=8)
+        
+        if footnote:
+            ax.set_xlabel(footnote, fontsize=8, color=T.FG_DIM, labelpad=8)
+            
         ax.set_title(f"{period} Sales Revenue", fontsize=10, pad=6)
         ax.grid(axis="y", alpha=0.3)
         ax.set_axisbelow(True)
         fig.tight_layout(pad=1.0)
+        
+        # Connect click event
+        fig.canvas.mpl_connect('pick_event', self._on_pick)
 
         canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
         canvas.draw()
         canvas.get_tk_widget().pack(fill="both", expand=True)
         self._chart_canvas = canvas
+
+        # Draw Category Pie Chart
+        for w in self._cat_chart_frame.winfo_children():
+            w.destroy()
+
+        cat_data = _fetch_category_data(period)
+        if cat_data:
+            cat_sizes = [c["revenue"] for c in cat_data if c["revenue"] > 0]
+            cat_labels = [c["category"] for c in cat_data if c["revenue"] > 0]
+
+            if cat_sizes:
+                fig2 = Figure(figsize=(3, 2.5), dpi=96, facecolor=T.CARD)
+                ax2 = fig2.add_subplot(111)
+                colors = ["#4cc9f0", "#4361ee", "#7209b7", "#f72585", "#ffb703", "#fb8500"]
+                
+                ax2.pie(
+                    cat_sizes, labels=cat_labels, autopct='%1.1f%%',
+                    startangle=140, colors=colors,
+                    textprops=dict(color=T.FG, fontsize=7),
+                    wedgeprops=dict(width=0.4, edgecolor=T.CARD)
+                )
+                ax2.axis('equal')
+                ax2.set_title(f"{period} Categories", fontsize=10, pad=6, color=T.FG)
+                fig2.tight_layout(pad=1.0)
+
+                canvas2 = FigureCanvasTkAgg(fig2, master=self._cat_chart_frame)
+                canvas2.draw()
+                canvas2.get_tk_widget().pack(fill="both", expand=True)
+            else:
+                tk.Label(self._cat_chart_frame, text="No category data.", bg=T.CARD, fg=T.FG_DIM).pack(expand=True)
+        else:
+            tk.Label(self._cat_chart_frame, text="No category data.", bg=T.CARD, fg=T.FG_DIM).pack(expand=True)
+
+    def _on_pick(self, event):
+        ind = event.ind[0]
+        period = self._period.get()
+        labels, values = _fetch_sales_data(period)
+        raw_label = labels[ind]
+        
+        import datetime
+        if period == "Daily":
+            start_date = raw_label
+            end_date = raw_label
+        elif period == "Weekly":
+            year, week = raw_label.split('-W')
+            dt_first = datetime.datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+            dt_last = dt_first + datetime.timedelta(days=6)
+            start_date = dt_first.strftime("%Y-%m-%d")
+            end_date = dt_last.strftime("%Y-%m-%d")
+        elif period == "Monthly":
+            dt_first = datetime.datetime.strptime(raw_label, "%Y-%m")
+            if dt_first.month == 12:
+                dt_last = dt_first.replace(day=31)
+            else:
+                dt_last = dt_first.replace(month=dt_first.month+1, day=1) - datetime.timedelta(days=1)
+            start_date = dt_first.strftime("%Y-%m-%d")
+            end_date = dt_last.strftime("%Y-%m-%d")
+        else: # Yearly
+            start_date = f"{raw_label}-01-01"
+            end_date = f"{raw_label}-12-31"
+
+        if self.on_navigate:
+            self.on_navigate("reports", start_date, end_date)
 
     # ── Low Stock ─────────────────────────────────────────────────────
 
@@ -276,7 +437,7 @@ class HomePanel(tk.Frame):
             self._low_section.pack_forget()
         else:
             self._low_section.pack(fill="x", pady=(0, 8),
-                                   before=self._chart_frame)
+                                   before=self._charts_container)
             self._low_title.pack(anchor="w", pady=(0, 4))
             self._tree_container.pack(fill="x")
 

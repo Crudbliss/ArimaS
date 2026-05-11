@@ -23,6 +23,7 @@ _DARK = {
     "CHART_HIST": "#4cc9f0",
     "CHART_ALT":  "#ffd166",
     "CHART_RF":   "#ffd166",
+    "ERROR":      "#ff4d4f",
 }
 
 _LIGHT = {
@@ -37,6 +38,7 @@ _LIGHT = {
     "CHART_HIST": "#CE9D7A",
     "CHART_ALT":  "#8B6914",  # Dark amber (readable on cream/beige)
     "CHART_RF":   "#7A5C00",
+    "ERROR":      "#C62828",  # Deep Red
 }
 
 _DARK_MPLRC = {
@@ -81,6 +83,7 @@ CHART_BAR  = _LIGHT["CHART_BAR"]
 CHART_HIST = _LIGHT["CHART_HIST"]
 CHART_ALT  = _LIGHT["CHART_ALT"]
 CHART_RF   = _LIGHT["CHART_RF"]
+ERROR      = _LIGHT["ERROR"]
 
 _dark_mode = False
 
@@ -96,7 +99,7 @@ def toggle_theme():
     """Switch between dark and light mode. Updates all module-level vars."""
     global _dark_mode
     global BG, CARD, ACCENT, SECONDARY, FG, FG_DIM
-    global CHART_BAR, CHART_HIST, CHART_ALT, CHART_RF
+    global CHART_BAR, CHART_HIST, CHART_ALT, CHART_RF, ERROR
 
     _dark_mode = not _dark_mode
     palette = _DARK if _dark_mode else _LIGHT
@@ -111,6 +114,7 @@ def toggle_theme():
     CHART_HIST = palette["CHART_HIST"]
     CHART_ALT  = palette["CHART_ALT"]
     CHART_RF   = palette["CHART_RF"]
+    ERROR      = palette["ERROR"]
 
     # Update matplotlib global rcParams so rebuilt charts use new colours
     matplotlib.rcParams.update(_DARK_MPLRC if _dark_mode else _LIGHT_MPLRC)

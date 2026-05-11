@@ -171,3 +171,29 @@ def toggle_archive_product(product_id: int, user_id: int, username: str) -> tupl
         return True, f"'{name}' has been {status_str.lower()}."
     except sqlite3.Error as e:
         return False, str(e)
+
+def get_restock_report() -> list[dict]:
+    """Fetch all active products that are at or below their reorder level."""
+    conn = get_connection()
+    try:
+        rows = conn.execute("""
+            SELECT id, name, category, stock_pieces, reorder_level, buying_price, pieces_per_sack
+            FROM products
+            WHERE stock_pieces <= reorder_level AND is_active = 1
+            ORDER BY stock_pieces ASC
+        """).fetchall()
+        
+        report = []
+        for r in rows:
+            report.append({
+                "id": r[0],
+                "name": r[1],
+                "category": r[2],
+                "stock": r[3],
+                "reorder_level": r[4],
+                "buying_price": r[5],
+                "pieces_per_sack": r[6]
+            })
+        return report
+    finally:
+        conn.close()
