@@ -107,27 +107,8 @@ class HomePanel(tk.Frame):
         self._cards_frame = tk.Frame(outer, bg=T.BG)
         self._cards_frame.pack(fill="x", padx=20, pady=(0, 10))
 
-        # ── Chart section ─────────────────────────────────────────────
-        chart_section = tk.Frame(outer, bg=T.BG)
-        chart_section.pack(fill="both", expand=True, padx=28, pady=(0, 16))
-
-        # "Sales Revenue" header + toggle buttons
-        chart_hdr = tk.Frame(chart_section, bg=T.BG)
-        chart_hdr.pack(fill="x", pady=(0, 4))
-        tk.Label(chart_hdr, text="Sales Revenue",
-                 font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(side="left")
-        toggle_frame = tk.Frame(chart_hdr, bg=T.BG)
-        toggle_frame.pack(side="right")
-        self._period_btns: dict[str, tk.Button] = {}
-        for p in PERIODS:
-            btn = tk.Button(toggle_frame, text=p, font=("Segoe UI", 9),
-                            relief="flat", cursor="hand2", padx=12, pady=4,
-                            command=lambda x=p: self._switch_period(x))
-            btn.pack(side="left", padx=2)
-            self._period_btns[p] = btn
-
-        # Low Stock section — sits directly below "Sales Revenue" heading
-        self._low_section = tk.Frame(chart_section, bg=T.BG)
+        # ── Low Stock section — directly below cards ──────────────────
+        self._low_section = tk.Frame(outer, bg=T.BG)
         # (packed conditionally in _refresh_low_stock)
 
         self._low_title = tk.Label(
@@ -153,8 +134,27 @@ class HomePanel(tk.Frame):
         self._low_tree.pack(fill="x")
         self._tree_container = tree_container
 
-        # Chart frames — below low stock
-        self._charts_container = tk.Frame(chart_section, bg=T.BG, height=230)
+        # ── Chart section — below low stock ───────────────────────────
+        chart_section = tk.Frame(outer, bg=T.BG)
+        chart_section.pack(fill="both", expand=True, padx=28, pady=(0, 16))
+
+        # "Sales Revenue" header + toggle buttons
+        chart_hdr = tk.Frame(chart_section, bg=T.BG)
+        chart_hdr.pack(fill="x", pady=(0, 4))
+        tk.Label(chart_hdr, text="Sales Revenue",
+                 font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(side="left")
+        toggle_frame = tk.Frame(chart_hdr, bg=T.BG)
+        toggle_frame.pack(side="right")
+        self._period_btns: dict[str, tk.Button] = {}
+        for p in PERIODS:
+            btn = tk.Button(toggle_frame, text=p, font=("Segoe UI", 9),
+                            relief="flat", cursor="hand2", padx=12, pady=4,
+                            command=lambda x=p: self._switch_period(x))
+            btn.pack(side="left", padx=2)
+            self._period_btns[p] = btn
+
+        # Chart frames
+        self._charts_container = tk.Frame(chart_section, bg=T.BG, height=400)
         self._charts_container.pack(fill="both", expand=True)
         self._charts_container.pack_propagate(False)
 
@@ -165,6 +165,7 @@ class HomePanel(tk.Frame):
         self._cat_chart_frame.pack(side="right", fill="both", expand=True, padx=(5, 0))
 
         self.refresh()
+
 
     # ── Stat Cards ────────────────────────────────────────────────────
 
@@ -327,8 +328,10 @@ class HomePanel(tk.Frame):
         else:
             formatted_labels = labels
 
-        fig = Figure(figsize=(8, 2.5), dpi=96)
+        fig = Figure(figsize=(8, 3.8), dpi=96)
         ax  = fig.add_subplot(111)
+        ax.set_facecolor(T.CARD)
+        fig.patch.set_facecolor(T.CARD)
         x   = range(len(labels))
 
         # Use a sleek line graph with filled area instead of bars
@@ -356,7 +359,7 @@ class HomePanel(tk.Frame):
         ax.set_title(f"{period} Sales Revenue", fontsize=10, pad=6)
         ax.grid(axis="y", alpha=0.3)
         ax.set_axisbelow(True)
-        fig.tight_layout(pad=1.0)
+        fig.subplots_adjust(top=0.82, bottom=0.22, left=0.10, right=0.97)
         
         # Connect click event
         fig.canvas.mpl_connect('pick_event', self._on_pick)
@@ -376,7 +379,7 @@ class HomePanel(tk.Frame):
             cat_labels = [c["category"] for c in cat_data if c["revenue"] > 0]
 
             if cat_sizes:
-                fig2 = Figure(figsize=(3, 2.5), dpi=96, facecolor=T.CARD)
+                fig2 = Figure(figsize=(3, 3.8), dpi=96, facecolor=T.CARD)
                 ax2 = fig2.add_subplot(111)
                 colors = ["#4cc9f0", "#4361ee", "#7209b7", "#f72585", "#ffb703", "#fb8500"]
                 
@@ -388,7 +391,7 @@ class HomePanel(tk.Frame):
                 )
                 ax2.axis('equal')
                 ax2.set_title(f"{period} Categories", fontsize=10, pad=6, color=T.FG)
-                fig2.tight_layout(pad=1.0)
+                fig2.subplots_adjust(top=0.85, bottom=0.05, left=0.05, right=0.95)
 
                 canvas2 = FigureCanvasTkAgg(fig2, master=self._cat_chart_frame)
                 canvas2.draw()
@@ -436,8 +439,8 @@ class HomePanel(tk.Frame):
         if not low:
             self._low_section.pack_forget()
         else:
-            self._low_section.pack(fill="x", pady=(0, 8),
-                                   before=self._charts_container)
+            self._low_section.pack(fill="x", padx=28, pady=(0, 8),
+                                   after=self._cards_frame)
             self._low_title.pack(anchor="w", pady=(0, 4))
             self._tree_container.pack(fill="x")
 

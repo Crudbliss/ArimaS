@@ -57,7 +57,13 @@ class LogsPanel(tk.Frame):
                  
         tk.Label(sr, text="Action:", font=("Segoe UI", 9),
                  bg=T.BG, fg=T.FG_DIM).pack(side="left", padx=(10, 0))
-        self._filter_action = ttk.Combobox(sr, values=["All", "SALE", "LOGIN", "RESTOCK", "ERROR", "UPDATE"],
+
+        if self._own_only:
+            action_values = ["All", "LOGIN", "SALE", "REFUND"]
+        else:
+            action_values = ["All", "SALE", "LOGIN", "REFUND", "ADD_STOCK", "RESTOCK", "ERROR", "UPDATE"]
+
+        self._filter_action = ttk.Combobox(sr, values=action_values,
                                            state="readonly", width=15)
         self._filter_action.set("All")
         self._filter_action.pack(side="left", padx=8)

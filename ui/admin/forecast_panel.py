@@ -84,7 +84,7 @@ class ForecastPanel(tk.Frame):
                  ).pack(expand=True)
 
         # Right: recommendations
-        right = tk.Frame(body, bg=T.BG, width=420)
+        right = tk.Frame(body, bg=T.BG, width=430)
         right.pack(side="right", fill="y")
         right.pack_propagate(False)
 
@@ -109,9 +109,9 @@ class ForecastPanel(tk.Frame):
 
         for col, text, w, anchor in [
             ("status", "Status",       68,  "center"),
-            ("name",   "Product",     145,  "w"),
-            ("stock",  "Stock",        58,  "center"),
-            ("demand", "14d Demand",   80,  "center"),
+            ("name",   "Product",     140,  "w"),
+            ("stock",  "Stock",        50,  "center"),
+            ("demand", "14d Demand",   82,  "center"),
             ("order",  "Sacks Needed", 80,  "center"),
         ]:
             self._rec_tree.heading(col, text=text)
