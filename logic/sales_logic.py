@@ -209,6 +209,17 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
         total_cost = summary_row[3] or 0
         total_profit = total_revenue - total_cost
 
+        # Category Performance
+        cat_rows = conn.execute("""
+            SELECT p.category, SUM(s.qty_sold) as cat_qty, SUM(s.total_amount) as cat_rev
+            FROM sales s
+            JOIN products p ON s.product_id = p.id
+            WHERE s.status = 'completed' AND date(s.sold_at) >= ? AND date(s.sold_at) <= ?
+            GROUP BY p.category
+            ORDER BY cat_rev DESC
+        """, (start_date, end_date)).fetchall()
+        category_data = [{"category": r[0] or "Uncategorized", "qty": r[1], "revenue": r[2]} for r in cat_rows]
+
         return {
             "total_revenue": total_revenue,
             "items_sold": summary_row[1],
@@ -216,7 +227,8 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
             "total_cost": total_cost,
             "total_profit": total_profit,
             "top_sellers": top_sellers,
-            "chart_data": chart_data
+            "chart_data": chart_data,
+            "category_data": category_data
         }
     finally:
         conn.close()

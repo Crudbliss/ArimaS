@@ -60,6 +60,10 @@ class ReportsPanel(tk.Frame):
         self._tab_sales = tk.Frame(self._notebook, bg=T.BG)
         self._notebook.add(self._tab_sales, text="Sales & Profit")
 
+        # Tab 2: Category Performance
+        self._tab_category = tk.Frame(self._notebook, bg=T.BG)
+        self._notebook.add(self._tab_category, text="Category Performance")
+
         # Summary Cards
         self._cards_frame = tk.Frame(self._tab_sales, bg=T.BG)
         self._cards_frame.pack(fill="x", pady=(0, 20))
@@ -111,6 +115,34 @@ class ReportsPanel(tk.Frame):
 
         # ── Export ───────────────────────────────────────────────────
         tk.Button(self._tab_sales, text="📥  Export Report", font=("Segoe UI", 10, "bold"), bg=T.CARD, fg=T.ACCENT, cursor="hand2", relief="flat", padx=20, pady=8, command=self._export).pack(anchor="e", pady=(0, 20))
+        
+        self._build_category_tab()
+
+    def _build_category_tab(self):
+        row_frame = tk.Frame(self._tab_category, bg=T.BG)
+        row_frame.pack(fill="both", expand=True, pady=(20, 20))
+
+        # Left: Data table
+        left_pane = tk.Frame(row_frame, bg=T.BG)
+        left_pane.pack(side="left", fill="both", expand=True, padx=(0, 10))
+        tk.Label(left_pane, text="Category Breakdown", font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 10))
+        
+        cols = ("category", "qty", "revenue")
+        self._cat_tree = ttk.Treeview(left_pane, columns=cols, show="headings", style="Report.Treeview", height=10)
+        self._cat_tree.heading("category", text="Category")
+        self._cat_tree.heading("qty", text="Units Sold")
+        self._cat_tree.heading("revenue", text="Revenue")
+        self._cat_tree.column("category", width=150)
+        self._cat_tree.column("qty", width=100, anchor="center")
+        self._cat_tree.column("revenue", width=120, anchor="e")
+        self._cat_tree.pack(fill="both", expand=True)
+
+        # Right: Pie Chart
+        right_pane = tk.Frame(row_frame, bg=T.BG)
+        right_pane.pack(side="right", fill="both", expand=True, padx=(10, 0))
+        tk.Label(right_pane, text="Revenue Split by Category", font=("Segoe UI", 12, "bold"), bg=T.BG, fg=T.FG).pack(anchor="w", pady=(0, 10))
+        self._cat_chart_frame = tk.Frame(right_pane, bg=T.CARD)
+        self._cat_chart_frame.pack(fill="both", expand=True)
 
     def _make_card(self, title, var, color):
         card = tk.Frame(self._cards_frame, bg=T.CARD, padx=20, pady=15)
@@ -166,39 +198,79 @@ class ReportsPanel(tk.Frame):
                 f"₱{item['revenue']:,.2f}"
             ))
 
-        self._draw_chart(report.get("chart_data", []))
+        self._draw_chart(report)
 
-    def _draw_chart(self, chart_data):
+    def _draw_chart(self, report):
+        chart_data = report.get("chart_data", [])
         for w in self._chart_frame.winfo_children():
             w.destroy()
 
         if not chart_data:
             tk.Label(self._chart_frame, text="No data to plot.", bg=T.CARD, fg=T.FG_DIM).pack(expand=True)
-            return
+        else:
+            fig = Figure(figsize=(5, 3), dpi=96)
+            ax = fig.add_subplot(111)
+            
+            dates = [d["date"][-5:] for d in chart_data] # MM-DD or HH:MM
+            revs = [d["revenue"] for d in chart_data]
 
-        fig = Figure(figsize=(5, 3), dpi=96)
-        ax = fig.add_subplot(111)
-        
-        dates = [d["date"][-5:] for d in chart_data] # MM-DD
-        revs = [d["revenue"] for d in chart_data]
+            ax.plot(dates, revs, color=T.CHART_BAR, marker="o", linewidth=2, markersize=5)
+            ax.fill_between(dates, revs, alpha=0.2, color=T.CHART_BAR)
+            
+            ax.set_ylabel("Revenue (₱)", fontsize=8)
+            ax.tick_params(axis='both', labelsize=8)
+            ax.grid(True, linestyle="--", alpha=0.3)
+            
+            # Rotate dates if too many
+            if len(dates) > 5:
+                ax.set_xticks(range(len(dates)))
+                ax.set_xticklabels(dates, rotation=45)
 
-        ax.plot(dates, revs, color=T.CHART_BAR, marker="o", linewidth=2, markersize=5)
-        ax.fill_between(dates, revs, alpha=0.2, color=T.CHART_BAR)
-        
-        ax.set_ylabel("Revenue (₱)", fontsize=8)
-        ax.tick_params(axis='both', labelsize=8)
-        ax.grid(True, linestyle="--", alpha=0.3)
-        
-        # Rotate dates if too many
-        if len(dates) > 5:
-            ax.set_xticks(range(len(dates)))
-            ax.set_xticklabels(dates, rotation=45)
+            fig.tight_layout(pad=1.0)
+            
+            canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
+            canvas.draw()
+            canvas.get_tk_widget().pack(fill="both", expand=True)
 
-        fig.tight_layout(pad=1.0)
+        # ── Update Category Tab ──
+        for item in self._cat_tree.get_children():
+            self._cat_tree.delete(item)
+            
+        cat_labels = []
+        cat_sizes = []
         
-        canvas = FigureCanvasTkAgg(fig, master=self._chart_frame)
-        canvas.draw()
-        canvas.get_tk_widget().pack(fill="both", expand=True)
+        for c in report.get("category_data", []):
+            self._cat_tree.insert("", "end", values=(
+                c["category"],
+                f"{c['qty']:,}",
+                f"₱{c['revenue']:,.2f}"
+            ))
+            if c["revenue"] > 0:
+                cat_labels.append(c["category"])
+                cat_sizes.append(c["revenue"])
+
+        for widget in self._cat_chart_frame.winfo_children():
+            widget.destroy()
+
+        if cat_sizes:
+            fig2 = Figure(figsize=(5, 4), dpi=100, facecolor=T.CARD)
+            ax2 = fig2.add_subplot(111)
+            colors = ["#4cc9f0", "#4361ee", "#7209b7", "#f72585", "#ffb703", "#fb8500"]
+            
+            ax2.pie(
+                cat_sizes, labels=cat_labels, autopct='%1.1f%%',
+                startangle=140, colors=colors,
+                textprops=dict(color=T.FG),
+                wedgeprops=dict(width=0.4, edgecolor=T.CARD)
+            )
+            ax2.axis('equal')
+            fig2.tight_layout()
+
+            canvas2 = FigureCanvasTkAgg(fig2, master=self._cat_chart_frame)
+            canvas2.draw()
+            canvas2.get_tk_widget().pack(fill="both", expand=True)
+        else:
+            tk.Label(self._cat_chart_frame, text="No category data available.", bg=T.CARD, fg=T.FG_DIM).pack(pady=50)
 
     def _export(self):
         start = self._start_var.get()
