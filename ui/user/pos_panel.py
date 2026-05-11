@@ -28,12 +28,14 @@ class PosPanel(tk.Frame):
         bar.pack(fill="x")
         # Load logo
         try:
-            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "RosemenLOGO.png")
+            logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "RosemenLOGO.png"))
             if os.path.exists(logo_path):
                 img = Image.open(logo_path)
                 img.thumbnail((30, 30), Image.Resampling.LANCZOS)
                 self._logo_photo = ImageTk.PhotoImage(img)
-                tk.Label(bar, image=self._logo_photo, bg=T.CARD).pack(side="left", padx=(20, 5))
+                lbl = tk.Label(bar, image=self._logo_photo, bg=T.CARD)
+                lbl.image = self._logo_photo  # Prevent garbage collection
+                lbl.pack(side="left", padx=(20, 5))
         except Exception as e:
             print("Failed to load logo in POS:", e)
 

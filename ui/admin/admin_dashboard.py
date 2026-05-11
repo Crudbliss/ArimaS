@@ -56,14 +56,33 @@ class AdminDashboard:
     def _build_sidebar(self):
         sb = self.sidebar
 
-        # Logo — click to toggle theme
-        self._logo_btn = tk.Button(
-            sb, text="👗", font=("Segoe UI", 28),
-            bg=T.CARD, fg=T.ACCENT,
-            relief="flat", cursor="hand2", bd=0,
-            activebackground=T.CARD, activeforeground=T.SECONDARY,
-            command=self._toggle_theme,
-        )
+        # Try to load logo
+        try:
+            from PIL import Image, ImageTk
+            import os
+            logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "RosemenLOGO.png"))
+            if os.path.exists(logo_path):
+                img = Image.open(logo_path)
+                img.thumbnail((70, 70), Image.Resampling.LANCZOS)
+                self._logo_photo = ImageTk.PhotoImage(img)
+                self._logo_btn = tk.Button(
+                    sb, image=self._logo_photo,
+                    bg=T.CARD, relief="flat", cursor="hand2", bd=0,
+                    activebackground=T.CARD,
+                    command=self._toggle_theme,
+                )
+                self._logo_btn.image = self._logo_photo  # Prevent garbage collection
+            else:
+                raise FileNotFoundError
+        except Exception:
+            self._logo_btn = tk.Button(
+                sb, text="👗", font=("Segoe UI", 28),
+                bg=T.CARD, fg=T.ACCENT,
+                relief="flat", cursor="hand2", bd=0,
+                activebackground=T.CARD, activeforeground=T.SECONDARY,
+                command=self._toggle_theme,
+            )
+            
         self._logo_btn.pack(pady=(24, 2))
 
         tk.Label(sb, text="Rosemen Ukay-Ukay",

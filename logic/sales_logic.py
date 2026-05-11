@@ -153,11 +153,15 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
         # Summary
         summary_row = conn.execute("""
             SELECT 
-                COALESCE(SUM(CASE WHEN status='completed' THEN total_amount ELSE 0 END), 0) as total_revenue,
-                COALESCE(SUM(CASE WHEN status='completed' THEN qty_sold ELSE 0 END), 0) as items_sold,
-                SUM(CASE WHEN status='refunded' THEN 1 ELSE 0 END) as refund_count
-            FROM sales
-            WHERE date(sold_at) >= ? AND date(sold_at) <= ?
+                COALESCE(SUM(CASE WHEN s.status='completed' THEN s.total_amount ELSE 0 END), 0) as total_revenue,
+                COALESCE(SUM(CASE WHEN s.status='completed' THEN s.qty_sold ELSE 0 END), 0) as items_sold,
+                SUM(CASE WHEN s.status='refunded' THEN 1 ELSE 0 END) as refund_count,
+                COALESCE(SUM(CASE WHEN s.status='completed' THEN 
+                    (p.buying_price / NULLIF(p.pieces_per_sack, 0)) * p.bundle_qty * s.qty_sold 
+                ELSE 0 END), 0) as total_cost
+            FROM sales s
+            JOIN products p ON s.product_id = p.id
+            WHERE date(s.sold_at) >= ? AND date(s.sold_at) <= ?
         """, (start_date, end_date)).fetchone()
         
         # Top Sellers (only completed sales)
@@ -184,6 +188,13 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
                 GROUP BY dt
                 ORDER BY dt ASC
             """, (start_date,)).fetchall()
+            
+            # Pad 06:00 to 23:00
+            hourly_dict = {r[0]: r[1] for r in chart_rows}
+            chart_data = []
+            for hour in range(6, 24):
+                h_str = f"{hour:02d}:00"
+                chart_data.append({"date": h_str, "revenue": hourly_dict.get(h_str, 0)})
         else:
             chart_rows = conn.execute("""
                 SELECT date(sold_at) as dt, SUM(total_amount) as daily_rev
@@ -192,13 +203,18 @@ def get_custom_report(start_date: str, end_date: str) -> dict:
                 GROUP BY dt
                 ORDER BY dt ASC
             """, (start_date, end_date)).fetchall()
+            chart_data = [{"date": r[0], "revenue": r[1]} for r in chart_rows]
         
-        chart_data = [{"date": r[0], "revenue": r[1]} for r in chart_rows]
-        
+        total_revenue = summary_row[0]
+        total_cost = summary_row[3] or 0
+        total_profit = total_revenue - total_cost
+
         return {
-            "total_revenue": summary_row[0],
+            "total_revenue": total_revenue,
             "items_sold": summary_row[1],
             "refund_count": summary_row[2] or 0,
+            "total_cost": total_cost,
+            "total_profit": total_profit,
             "top_sellers": top_sellers,
             "chart_data": chart_data
         }

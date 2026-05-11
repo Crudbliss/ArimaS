@@ -30,12 +30,12 @@ class ReportsPanel(tk.Frame):
         filter_frame = tk.Frame(self, bg=T.CARD, padx=20, pady=15)
         filter_frame.pack(fill="x", padx=28, pady=(0, 20))
 
-        tk.Label(filter_frame, text="From (YYYY-MM-DD):", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).grid(row=0, column=0, padx=(0, 10))
+        tk.Label(filter_frame, text="From :", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).grid(row=0, column=0, padx=(0, 10))
         self._start_var = tk.StringVar()
         DateEntry(filter_frame, textvariable=self._start_var, date_pattern='yyyy-mm-dd', font=("Segoe UI", 10), width=12,
                   background='darkblue', foreground='white', borderwidth=2).grid(row=0, column=1, ipady=4, padx=(0, 20))
 
-        tk.Label(filter_frame, text="To (YYYY-MM-DD):", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).grid(row=0, column=2, padx=(0, 10))
+        tk.Label(filter_frame, text="To :", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).grid(row=0, column=2, padx=(0, 10))
         self._end_var = tk.StringVar()
         DateEntry(filter_frame, textvariable=self._end_var, date_pattern='yyyy-mm-dd', font=("Segoe UI", 10), width=12,
                   background='darkblue', foreground='white', borderwidth=2).grid(row=0, column=3, ipady=4, padx=(0, 20))
@@ -50,25 +50,33 @@ class ReportsPanel(tk.Frame):
         for p in ["Today", "Last 7 Days", "7 Weeks Ago"]:
             tk.Button(presets_frame, text=p, font=("Segoe UI", 8), bg=T.SECONDARY, fg=T.FG, cursor="hand2", relief="flat", padx=10, command=lambda x=p: self._set_preset(x)).pack(side="left", padx=5)
 
-        # ── Report Content ───────────────────────────────────────────
-        self._content_frame = tk.Frame(self, bg=T.BG)
-        self._content_frame.pack(fill="both", expand=True, padx=28)
+        # ── Notebook ───────────────────────────────────────────
+        style = ttk.Style()
+        style.configure("TNotebook.Tab", font=("Segoe UI", 10, "bold"), padding=[15, 5])
+        self._notebook = ttk.Notebook(self)
+        self._notebook.pack(fill="both", expand=True, padx=28)
+
+        # Tab 1: Sales & Profit
+        self._tab_sales = tk.Frame(self._notebook, bg=T.BG)
+        self._notebook.add(self._tab_sales, text="Sales & Profit")
 
         # Summary Cards
-        self._cards_frame = tk.Frame(self._content_frame, bg=T.BG)
+        self._cards_frame = tk.Frame(self._tab_sales, bg=T.BG)
         self._cards_frame.pack(fill="x", pady=(0, 20))
 
         self.lbl_rev = tk.StringVar(value="₱0.00")
+        self.lbl_profit = tk.StringVar(value="₱0.00")
         self.lbl_items = tk.StringVar(value="0")
         self.lbl_refunds = tk.StringVar(value="0")
 
         self._make_card("Total Revenue", self.lbl_rev, T.CHART_ALT)
+        self._make_card("Total Profit", self.lbl_profit, "#06d6a0")
         self._make_card("Items Sold", self.lbl_items, T.FG)
-        self._make_card("Refunds Processed", self.lbl_refunds, T.FG_DIM)
+        self._make_card("Refunds", self.lbl_refunds, T.FG_DIM)
 
         # Content row (Tree + Chart)
-        row_frame = tk.Frame(self._content_frame, bg=T.BG)
-        row_frame.pack(fill="both", expand=True)
+        row_frame = tk.Frame(self._tab_sales, bg=T.BG)
+        row_frame.pack(fill="both", expand=True, pady=(0, 20))
 
         # Left: Top Sellers
         left_pane = tk.Frame(row_frame, bg=T.BG)
@@ -102,7 +110,7 @@ class ReportsPanel(tk.Frame):
         self._chart_frame.pack(fill="both", expand=True)
 
         # ── Export ───────────────────────────────────────────────────
-        tk.Button(self._content_frame, text="📥  Export Report", font=("Segoe UI", 10, "bold"), bg=T.CARD, fg=T.ACCENT, cursor="hand2", relief="flat", padx=20, pady=8, command=self._export).pack(anchor="e", pady=(20, 20))
+        tk.Button(self._tab_sales, text="📥  Export Report", font=("Segoe UI", 10, "bold"), bg=T.CARD, fg=T.ACCENT, cursor="hand2", relief="flat", padx=20, pady=8, command=self._export).pack(anchor="e", pady=(0, 20))
 
     def _make_card(self, title, var, color):
         card = tk.Frame(self._cards_frame, bg=T.CARD, padx=20, pady=15)
@@ -145,6 +153,7 @@ class ReportsPanel(tk.Frame):
             return
             
         self.lbl_rev.set(f"₱{report['total_revenue']:,.2f}")
+        self.lbl_profit.set(f"₱{report.get('total_profit', 0):,.2f}")
         self.lbl_items.set(f"{report['items_sold']:,}")
         self.lbl_refunds.set(f"{report['refund_count']:,}")
         
@@ -221,6 +230,7 @@ class ReportsPanel(tk.Frame):
                 
                 writer.writerow(["Summary"])
                 writer.writerow(["Total Revenue", self.lbl_rev.get()])
+                writer.writerow(["Total Profit", self.lbl_profit.get()])
                 writer.writerow(["Items Sold", self.lbl_items.get()])
                 writer.writerow(["Refunds Processed", self.lbl_refunds.get()])
                 writer.writerow([])

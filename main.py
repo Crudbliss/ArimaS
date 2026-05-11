@@ -94,7 +94,7 @@ if __name__ == "__main__":
         if os.path.exists(logo_path):
             img = Image.open(logo_path)
             photo = ImageTk.PhotoImage(img)
-            root.iconphoto(False, photo)
+            root.iconphoto(True, photo)
     except Exception as e:
         print("Could not set window icon:", e)
 

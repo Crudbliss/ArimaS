@@ -53,13 +53,15 @@ class LoginWindow:
 
         # Load and display the logo
         try:
-            logo_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "RosemenLOGO.png")
+            logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "RosemenLOGO.png"))
             if os.path.exists(logo_path):
                 img = Image.open(logo_path)
                 # Resize the image to look good in the header
                 img.thumbnail((120, 120), Image.Resampling.LANCZOS)
                 self._logo_photo = ImageTk.PhotoImage(img)
-                tk.Label(header, image=self._logo_photo, bg=T.CARD).pack(pady=(0, 5))
+                lbl = tk.Label(header, image=self._logo_photo, bg=T.CARD)
+                lbl.image = self._logo_photo  # Prevent garbage collection
+                lbl.pack(pady=(0, 5))
         except Exception as e:
             print("Failed to load logo:", e)
 
