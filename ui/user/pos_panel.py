@@ -516,43 +516,68 @@ class _CheckoutDialog(tk.Toplevel):
         self._build()
         self.update_idletasks()
         sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
-        self.geometry(f"360x420+{(sw-360)//2}+{(sh-420)//2}")
+        self.geometry(f"360x500+{(sw-360)//2}+{(sh-500)//2}")
         
     def _build(self):
         f = tk.Frame(self, bg=T.CARD, padx=24, pady=20)
         f.pack(fill="both", expand=True)
 
-        tk.Label(f, text="Confirm Transaction", font=("Segoe UI", 16, "bold"), bg=T.CARD, fg=T.FG).pack(anchor="w", pady=(0, 16))
-        
+        tk.Label(f, text="Confirm Transaction", font=("Segoe UI", 16, "bold"), bg=T.CARD, fg=T.FG).pack(anchor="w", pady=(0, 12))
+
         # Summary
         summary_frame = tk.Frame(f, bg=T.SECONDARY, padx=10, pady=10)
-        summary_frame.pack(fill="x", pady=(0, 16))
-        
+        summary_frame.pack(fill="x", pady=(0, 12))
         tk.Label(summary_frame, text=f"Total Items: {sum(i['qty'] for i in self.cart)}", font=("Segoe UI", 10), bg=T.SECONDARY, fg=T.FG_DIM).pack(anchor="w")
-        tk.Label(summary_frame, text=f"Total Amount: ₱{self.total:,.2f}", font=("Segoe UI", 14, "bold"), bg=T.SECONDARY, fg=T.FG).pack(anchor="w", pady=(4,0))
-        
-        # Cash Tendered
-        tk.Label(f, text="Cash Tendered (₱):", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
-        
+        tk.Label(summary_frame, text=f"Total Amount: \N{PESO SIGN}{self.total:,.2f}", font=("Segoe UI", 14, "bold"), bg=T.SECONDARY, fg=T.FG).pack(anchor="w", pady=(4, 0))
+
+        # Payment Method
+        tk.Label(f, text="Payment Method:", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
+        self.v_payment = tk.StringVar(value="Cash")
+        radio_frame = tk.Frame(f, bg=T.CARD)
+        radio_frame.pack(fill="x", pady=(4, 12))
+        for method in ("Cash", "GCash"):
+            tk.Radiobutton(
+                radio_frame, text=method, variable=self.v_payment, value=method,
+                font=("Segoe UI", 10), bg=T.CARD, fg=T.FG,
+                selectcolor=T.SECONDARY, activebackground=T.CARD,
+                command=self._on_payment_change
+            ).pack(side="left", padx=(0, 12))
+
+        # Cash Tendered frame (hidden for non-Cash)
+        self.tendered_frame = tk.Frame(f, bg=T.CARD)
+        tk.Label(self.tendered_frame, text="Cash Tendered (\N{PESO SIGN}):", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
         self.v_tendered = tk.StringVar()
         self.v_tendered.trace_add("write", self._calc_change)
-        
-        ent = tk.Entry(f, textvariable=self.v_tendered, font=("Segoe UI", 16, "bold"),
+        ent = tk.Entry(self.tendered_frame, textvariable=self.v_tendered, font=("Segoe UI", 16, "bold"),
                  bg=T.BG, fg=T.FG, insertbackground=T.FG, relief="flat", justify="right")
-        ent.pack(fill="x", pady=(4, 16), ipady=8)
+        ent.pack(fill="x", pady=(4, 8), ipady=8)
         ent.focus()
 
-        # Change
-        self.v_change = tk.StringVar(value="Change: ₱ 0.00")
-        tk.Label(f, textvariable=self.v_change, font=("Segoe UI", 12, "bold"), bg=T.CARD, fg=T.ACCENT).pack(anchor="w", pady=(0, 24))
+        # Change display
+        self.v_change = tk.StringVar(value="Change: \N{PESO SIGN} 0.00")
+        self.change_label = tk.Label(f, textvariable=self.v_change, font=("Segoe UI", 12, "bold"), bg=T.CARD, fg=T.ACCENT)
 
-        # Confirm Button
+        # Confirm Button (always at bottom)
         self.btn_confirm = tk.Button(f, text="Confirm Payment", font=("Segoe UI", 12, "bold"),
                   bg=T.ACCENT, fg=T.FG, relief="flat", cursor="hand2", pady=10, command=self._confirm)
-        self.btn_confirm.pack(fill="x")
-        
+        self.btn_confirm.pack(fill="x", side="bottom")
+
         self.bind("<Return>", lambda e: self._confirm())
-        
+        self._on_payment_change()  # initial state
+
+
+    def _on_payment_change(self):
+        """Show tendered/change only for Cash; auto-confirm for digital payments."""
+        is_cash = self.v_payment.get() == "Cash"
+        if is_cash:
+            self.tendered_frame.pack(fill="x", before=self.change_label)
+            self.change_label.pack(anchor="w", pady=(0, 16))
+            self._calc_change()
+        else:
+            self.tendered_frame.pack_forget()
+            self.change_label.pack_forget()
+            self.btn_confirm.config(state="normal")
+
     def _calc_change(self, *args):
         try:
             val = self.v_tendered.get().replace(",", "")
@@ -572,22 +597,31 @@ class _CheckoutDialog(tk.Toplevel):
             self.btn_confirm.config(state="disabled")
 
     def _confirm(self):
-        try:
-            tendered = float(self.v_tendered.get().replace(",", ""))
-        except ValueError:
-            messagebox.showerror("Invalid", "Please enter a valid amount.", parent=self)
-            return
-            
-        change = tendered - self.total
-        if change < 0:
-            messagebox.showerror("Insufficient", "Tendered amount is less than total.", parent=self)
-            return
-            
+        method = self.v_payment.get()
+        if method == "Cash":
+            try:
+                tendered = float(self.v_tendered.get().replace(",", ""))
+            except ValueError:
+                messagebox.showerror("Invalid", "Please enter a valid amount.", parent=self)
+                return
+            change = tendered - self.total
+            if change < 0:
+                messagebox.showerror("Insufficient", "Tendered amount is less than total.", parent=self)
+                return
+        else:
+            tendered = self.total
+            change = 0.0
+
         user = get_current_user()
-        ok, msg, txn_number = process_sale(self.cart, user["id"], user["username"], tendered=tendered, change=change)
+        ok, msg, txn_number = process_sale(
+            self.cart, user["id"], user["username"],
+            tendered=tendered, change=change, payment_method=method
+        )
         
         if ok:
-            _ReceiptDialog(self.master, cart=self.cart, total=self.total, tendered=tendered, change=change, txn_number=txn_number)
+            _ReceiptDialog(self.master, cart=self.cart, total=self.total,
+                           tendered=tendered, change=change,
+                           txn_number=txn_number, payment_method=method)
             self.on_success()
             self.destroy()
         else:
@@ -598,7 +632,7 @@ class _CheckoutDialog(tk.Toplevel):
 class _ReceiptDialog(tk.Toplevel):
     """Shows a receipt. Can be used from fresh checkout (cart mode) or from
     a transaction lookup (txn_number mode)."""
-    def __init__(self, parent, *, cart=None, total=None, tendered=None, change=None, txn_number=None):
+    def __init__(self, parent, *, cart=None, total=None, tendered=None, change=None, txn_number=None, payment_method="Cash"):
         super().__init__(parent)
         self.title("Transaction Receipt")
         self.configure(bg="#ffffff")
@@ -616,6 +650,7 @@ class _ReceiptDialog(tk.Toplevel):
                 self.txn_number = data["txn_number"]
                 self.sold_at = data["sold_at"]
                 self.cashier = data["cashier"]
+                self.payment_method = data.get("payment_method", "Cash")
             else:
                 self.items = []
                 self.total = 0
@@ -624,6 +659,7 @@ class _ReceiptDialog(tk.Toplevel):
                 self.txn_number = txn_number
                 self.sold_at = ""
                 self.cashier = ""
+                self.payment_method = "Cash"
         else:
             # Fresh checkout mode
             self.items = [{"name": i["name"], "qty": i["qty"], "unit_price": i["unit_price"], "subtotal": i["qty"] * i["unit_price"]} for i in (cart or [])]
@@ -633,6 +669,7 @@ class _ReceiptDialog(tk.Toplevel):
             self.txn_number = txn_number or ""
             self.sold_at = ""
             self.cashier = ""
+            self.payment_method = payment_method or "Cash"
 
         self._build()
         self.update_idletasks()
@@ -699,8 +736,10 @@ class _ReceiptDialog(tk.Toplevel):
             tk.Label(r, text=value, font=font, bg="#ffffff", fg="#000000").pack(side="right")
 
         add_row(totals_frame, "TOTAL:", f"P {self.total:,.2f}", bold=True)
-        add_row(totals_frame, "CASH:", f"P {self.tendered:,.2f}")
-        add_row(totals_frame, "CHANGE:", f"P {self.change:,.2f}")
+        add_row(totals_frame, "METHOD:", self.payment_method)
+        if self.payment_method == "Cash":
+            add_row(totals_frame, "CASH:", f"P {self.tendered:,.2f}")
+            add_row(totals_frame, "CHANGE:", f"P {self.change:,.2f}")
 
         tk.Label(f, text="--------------------------------", font=("Courier", 10), bg="#ffffff", fg="#000000").pack(pady=4)
         tk.Label(f, text="Thank you for shopping!", font=("Courier", 10, "bold"), bg="#ffffff", fg="#000000").pack(pady=10)
