@@ -7,7 +7,7 @@ from database.db_setup import get_connection
 from utils.logger import log_action
 
 
-def process_sale(cart: list[dict], user_id: int, username: str, tendered: float = 0.0, change: float = 0.0, payment_method: str = "Cash") -> tuple[bool, str, str | None]:
+def process_sale(cart: list[dict], user_id: int, username: str, tendered: float = 0.0, change: float = 0.0, payment_method: str = "Cash", payment_ref: str = None) -> tuple[bool, str, str | None]:
     """
     cart items: {"product_id", "name", "qty", "unit_price", "bundle_qty"}
     Returns (success, message, txn_number)
@@ -40,9 +40,9 @@ def process_sale(cart: list[dict], user_id: int, username: str, tendered: float 
                 )
 
             conn.execute("""
-                INSERT INTO sales (txn_number, product_id, qty_sold, unit_price, total_amount, tendered, change, status, served_by, payment_method)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?)
-            """, (txn_number, pid, qty, unit_price, total, tendered, change, user_id, payment_method))
+                INSERT INTO sales (txn_number, product_id, qty_sold, unit_price, total_amount, tendered, change, status, served_by, payment_method, payment_ref)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'completed', ?, ?, ?)
+            """, (txn_number, pid, qty, unit_price, total, tendered, change, user_id, payment_method, payment_ref))
             conn.execute("""
                 UPDATE products SET stock_pieces = stock_pieces - ?,
                     updated_at = datetime('now','localtime')
@@ -71,7 +71,7 @@ def get_receipt_by_txn(txn_number: str) -> dict | None:
     rows = conn.execute("""
         SELECT p.name, s.qty_sold, s.unit_price, s.total_amount,
                s.tendered, s.change, s.sold_at, u.username, s.txn_number,
-               COALESCE(s.payment_method, 'Cash')
+               COALESCE(s.payment_method, 'Cash'), s.payment_ref
         FROM sales s
         JOIN products p ON s.product_id = p.id
         JOIN users u ON s.served_by = u.id
@@ -91,6 +91,7 @@ def get_receipt_by_txn(txn_number: str) -> dict | None:
         "sold_at": rows[0][6],
         "cashier": rows[0][7],
         "payment_method": rows[0][9] or "Cash",
+        "payment_ref": rows[0][10],
     }
 
 

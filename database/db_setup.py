@@ -106,15 +106,17 @@ def create_tables(conn: sqlite3.Connection):
             status       TEXT    NOT NULL DEFAULT 'completed',
             served_by    INTEGER NOT NULL REFERENCES users(id),
             sold_at      TEXT    NOT NULL DEFAULT (datetime('now', 'localtime')),
-            payment_method TEXT  NOT NULL DEFAULT 'Cash'
+            payment_method TEXT  NOT NULL DEFAULT 'Cash',
+            payment_ref    TEXT
         )
     """)
 
-    # --- Migration: add payment_method to sales if it doesn't exist ---
-    try:
-        cursor.execute("ALTER TABLE sales ADD COLUMN payment_method TEXT NOT NULL DEFAULT 'Cash'")
-    except sqlite3.OperationalError:
-        pass  # Column already exists
+    # --- Migration: add payment_method and payment_ref to sales if they don't exist ---
+    for col, definition in [("payment_method", "TEXT NOT NULL DEFAULT 'Cash'"), ("payment_ref", "TEXT")]:
+        try:
+            cursor.execute(f"ALTER TABLE sales ADD COLUMN {col} {definition}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
 
     # --- Migration: add columns to existing sales table if they don't exist ---
     for col_sql in [

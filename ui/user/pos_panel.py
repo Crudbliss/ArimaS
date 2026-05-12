@@ -543,6 +543,13 @@ class _CheckoutDialog(tk.Toplevel):
                 command=self._on_payment_change
             ).pack(side="left", padx=(0, 12))
 
+        # GCash Info (hidden by default)
+        self.gcash_frame = tk.Frame(f, bg=T.CARD)
+        tk.Label(self.gcash_frame, text="GCash Number:", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
+        self.v_gcash_num = tk.StringVar()
+        tk.Entry(self.gcash_frame, textvariable=self.v_gcash_num, font=("Segoe UI", 12),
+                 bg=T.BG, fg=T.FG, insertbackground=T.FG, relief="flat").pack(fill="x", pady=(4, 8), ipady=4)
+
         # Cash Tendered frame (hidden for non-Cash)
         self.tendered_frame = tk.Frame(f, bg=T.CARD)
         tk.Label(self.tendered_frame, text="Cash Tendered (\N{PESO SIGN}):", font=("Segoe UI", 10), bg=T.CARD, fg=T.FG_DIM).pack(anchor="w")
@@ -567,15 +574,22 @@ class _CheckoutDialog(tk.Toplevel):
 
 
     def _on_payment_change(self):
-        """Show tendered/change only for Cash; auto-confirm for digital payments."""
-        is_cash = self.v_payment.get() == "Cash"
-        if is_cash:
+        """Show tendered/change only for Cash; GCash number for GCash."""
+        method = self.v_payment.get()
+        if method == "Cash":
+            self.gcash_frame.pack_forget()
+            self.change_label.pack(anchor="w", pady=(0, 16), before=self.btn_confirm)
             self.tendered_frame.pack(fill="x", before=self.change_label)
-            self.change_label.pack(anchor="w", pady=(0, 16))
             self._calc_change()
+        elif method == "GCash":
+            self.tendered_frame.pack_forget()
+            self.change_label.pack_forget()
+            self.gcash_frame.pack(fill="x", pady=(0, 16), before=self.btn_confirm)
+            self.btn_confirm.config(state="normal")
         else:
             self.tendered_frame.pack_forget()
             self.change_label.pack_forget()
+            self.gcash_frame.pack_forget()
             self.btn_confirm.config(state="normal")
 
     def _calc_change(self, *args):
@@ -598,6 +612,7 @@ class _CheckoutDialog(tk.Toplevel):
 
     def _confirm(self):
         method = self.v_payment.get()
+        payment_ref = None
         if method == "Cash":
             try:
                 tendered = float(self.v_tendered.get().replace(",", ""))
@@ -609,19 +624,28 @@ class _CheckoutDialog(tk.Toplevel):
                 messagebox.showerror("Insufficient", "Tendered amount is less than total.", parent=self)
                 return
         else:
+            # Digital payments (GCash, etc.)
             tendered = self.total
             change = 0.0
+            if method == "GCash":
+                payment_ref = self.v_gcash_num.get().strip()
+                if not payment_ref.isdigit():
+                    messagebox.showerror("Invalid Input", "GCash number must contain only digits.", parent=self)
+                    return
+                if len(payment_ref) != 11:
+                    messagebox.showerror("Invalid Length", f"GCash number must be exactly 11 digits (found {len(payment_ref)}).", parent=self)
+                    return
 
         user = get_current_user()
         ok, msg, txn_number = process_sale(
             self.cart, user["id"], user["username"],
-            tendered=tendered, change=change, payment_method=method
+            tendered=tendered, change=change, payment_method=method, payment_ref=payment_ref
         )
         
         if ok:
             _ReceiptDialog(self.master, cart=self.cart, total=self.total,
                            tendered=tendered, change=change,
-                           txn_number=txn_number, payment_method=method)
+                           txn_number=txn_number, payment_method=method, payment_ref=payment_ref)
             self.on_success()
             self.destroy()
         else:
@@ -632,7 +656,7 @@ class _CheckoutDialog(tk.Toplevel):
 class _ReceiptDialog(tk.Toplevel):
     """Shows a receipt. Can be used from fresh checkout (cart mode) or from
     a transaction lookup (txn_number mode)."""
-    def __init__(self, parent, *, cart=None, total=None, tendered=None, change=None, txn_number=None, payment_method="Cash"):
+    def __init__(self, parent, *, cart=None, total=None, tendered=None, change=None, txn_number=None, payment_method="Cash", payment_ref=None):
         super().__init__(parent)
         self.title("Transaction Receipt")
         self.configure(bg="#ffffff")
@@ -651,6 +675,7 @@ class _ReceiptDialog(tk.Toplevel):
                 self.sold_at = data["sold_at"]
                 self.cashier = data["cashier"]
                 self.payment_method = data.get("payment_method", "Cash")
+                self.payment_ref = data.get("payment_ref")
             else:
                 self.items = []
                 self.total = 0
@@ -660,6 +685,7 @@ class _ReceiptDialog(tk.Toplevel):
                 self.sold_at = ""
                 self.cashier = ""
                 self.payment_method = "Cash"
+                self.payment_ref = None
         else:
             # Fresh checkout mode
             self.items = [{"name": i["name"], "qty": i["qty"], "unit_price": i["unit_price"], "subtotal": i["qty"] * i["unit_price"]} for i in (cart or [])]
@@ -670,6 +696,7 @@ class _ReceiptDialog(tk.Toplevel):
             self.sold_at = ""
             self.cashier = ""
             self.payment_method = payment_method or "Cash"
+            self.payment_ref = payment_ref
 
         self._build()
         self.update_idletasks()
@@ -737,6 +764,9 @@ class _ReceiptDialog(tk.Toplevel):
 
         add_row(totals_frame, "TOTAL:", f"P {self.total:,.2f}", bold=True)
         add_row(totals_frame, "METHOD:", self.payment_method)
+        if self.payment_method == "GCash" and self.payment_ref:
+            add_row(totals_frame, "GCASH #:", self.payment_ref)
+
         if self.payment_method == "Cash":
             add_row(totals_frame, "CASH:", f"P {self.tendered:,.2f}")
             add_row(totals_frame, "CHANGE:", f"P {self.change:,.2f}")
